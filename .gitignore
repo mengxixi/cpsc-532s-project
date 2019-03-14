@@ -154,3 +154,10 @@ Backup[ ]of[ ]*.numbers/
 
 # Mac finder files and hidden folders
 .DS_Store
+._*.py
+
+# Data directories
+features
+models
+logs
+annotations
