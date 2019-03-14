@@ -3,10 +3,12 @@ import glob
 import shutil
 import argparse
 import logging
+import pickle
 
 import flickr30k_entities_utils as flickr30k 
 
 import numpy as np
+from tqdm import tqdm
 
 
 # logging configurations
@@ -34,7 +36,7 @@ def generate_features():
 
 def generate_annotations():
 
-    for fid in ALL_IDS:
+    for fid in tqdm(ALL_IDS):
         sent_file = os.path.join(SENT_RAW_DIR, fid+'.txt')
         anno_file = os.path.join(ANNO_RAW_DIR, fid+'.xml')
         sent_data = flickr30k.get_sentence_data(sent_file)
@@ -44,6 +46,7 @@ def generate_annotations():
 
         phrase_ids = set()
         phrases = []
+        gt_boxes = []
 
         for sent in sent_data:
             for phrase in sent['phrases']:
@@ -57,22 +60,21 @@ def generate_annotations():
                     # only care about phrases that actually has a corresponding box
                     continue
 
-                
-
                 phrase_ids.add(phrase_id)
+
                 phrases.append(phrase['phrase'])
+                gt_boxes.append(boxes[phrase_id])
 
-
-
-        quit()
+        with open(os.path.join(ANNO_DIR, fid+'.pkl'), 'wb') as f:
+            fdata = {'phrases' : phrases, 'gt_boxes' : gt_boxes}
+            pickle.dump(fdata, f)
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-m", "--mode", type=str, choices=["feat", "anno"],default="anno")
-    # parser.add_argument("-g", "--gpu", type=str, default='0')
-    # parser.add_argument("--restore_id", type=int, default=0)
+
     args = parser.parse_args()
 
     if args.mode == "anno":
