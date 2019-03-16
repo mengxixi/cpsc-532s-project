@@ -3,8 +3,10 @@ import glob
 import shutil
 import logging
 import pickle
+import uuid
 
 import flickr30k_entities_utils as flickr30k 
+from util.iou import calc_iou
 
 import numpy as np
 import torch
@@ -30,6 +32,7 @@ ANNO_DIR = 'annotations'
 
 CROP_SIZE = 224
 FEATURE_SIZE = 4096
+IOU_THRESHOLD = 0.5
 
 
 with open('/home/siyi/flickr30k_entities/all.txt') as f:
@@ -46,6 +49,7 @@ def load_crop(filename, box):
 
     image = Image.open(filename).convert('RGB')
     crop = transforms.functional.crop(image, box[0], box[1], box[3]-box[1], box[2]-box[0])
+
     image_tensor = loader(crop).float()
     image_var = Variable(image_tensor).unsqueeze(0)
     return image_var.cuda()
@@ -80,6 +84,8 @@ def preprocess_flickr30k_entities():
             data = pickle.load(f)
             
         proposal_boxes = [list(map(int, box[:4])) for box in data['boxes']]
+        ## TODO: remove this 
+        proposal_boxes = list(filter(lambda box: not all(v==0 for v in box), proposal_boxes))
 
         sent_file = os.path.join(SENT_RAW_DIR, fid+'.txt')
         anno_file = os.path.join(ANNO_RAW_DIR, fid+'.xml')
@@ -91,6 +97,7 @@ def preprocess_flickr30k_entities():
         phrase_ids = set()
         phrases = []
         gt_boxes = []
+        gt_ppos_all = []
 
         for sent in sent_data:
             for phrase in sent['phrases']:
@@ -109,11 +116,20 @@ def preprocess_flickr30k_entities():
                 phrases.append(phrase['phrase'])
                 gt_boxes.append(boxes[phrase_id])
 
+                pos_proposals = []
+                for i, proposal in enumerate(proposal_boxes):
+                    ## TODO: instead of comparing with the union of the gt, i'm just checking if it overlaps with any of the gt boxes for now, may have to change to match with literature..
+                    for gt in boxes[phrase_id]:
+                        if calc_iou(proposal, gt) > IOU_THRESHOLD:
+                            pos_proposals.append(i)
+                            break
+
         if len(phrases) > 0:
             with open(os.path.join(ANNO_DIR, fid+'.pkl'), 'wb') as f:
-                fdata = {'phrases'  : phrases, 
-                         'gt_boxes' : gt_boxes,
-                         'proposals': proposal_boxes}
+                fdata = {'phrases'      : phrases, 
+                         'gt_boxes'     : gt_boxes,
+                         'proposals'    : proposal_boxes,
+                         'gt_ppos_all'  : gt_ppos_all,}
                 pickle.dump(fdata, f)
 
             features = generate_features(os.path.join(IMG_RAW_DIR, fid+'.jpg'), proposal_boxes, vgg_model)
