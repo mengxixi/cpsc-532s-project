@@ -1,14 +1,18 @@
 import os
 import glob
 import shutil
-import argparse
 import logging
 import pickle
 
 import flickr30k_entities_utils as flickr30k 
 
 import numpy as np
+import torch
+from torch import nn
+from torch.autograd import Variable
+from torchvision import models, transforms
 from tqdm import tqdm
+from PIL import Image
 
 
 # logging configurations
@@ -18,10 +22,14 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 
 ANNO_RAW_DIR = '/home/siyi/flickr30k_entities/Annotations/'
 SENT_RAW_DIR = '/home/siyi/flickr30k_entities/Sentences/'
+IMG_RAW_DIR = '/home/siyi/flickr30k-images'
 
 
 FEAT_DIR = 'features'
 ANNO_DIR = 'annotations'
+
+CROP_SIZE = 224
+FEATURE_SIZE = 4096
 
 
 with open('/home/siyi/flickr30k_entities/all.txt') as f:
@@ -29,14 +37,50 @@ with open('/home/siyi/flickr30k_entities/all.txt') as f:
 ALL_IDS = [x.strip() for x in ALL_IDS]
 
 
-def generate_features():
-    ## 100 features per image i.e. 100x4096 tensor per .npy
-    raise NotImplementedError
+def load_crop(filename, box):
+    loader = transforms.Compose([
+        ## TODO: Cropped bbox isn't a square, but VGG requires squared input, is this ok?
+        transforms.Resize((CROP_SIZE,CROP_SIZE)),
+        transforms.ToTensor(),
+    ])
+
+    image = Image.open(filename).convert('RGB')
+    crop = transforms.functional.crop(image, box[0], box[1], box[3]-box[1], box[2]-box[0])
+    image_tensor = loader(crop).float()
+    image_var = Variable(image_tensor).unsqueeze(0)
+    return image_var.cuda()
 
 
-def generate_annotations():
+def generate_features(im_file, boxes, model):
 
-    for fid in tqdm(ALL_IDS):
+    crops = [load_crop(im_file, box) for box in boxes]
+
+    features = torch.Tensor(len(crops), FEATURE_SIZE)
+
+    for i in range(0, len(crops), 16):
+        batch = crops[i:i+16]
+        batch_crops = torch.cat(batch)
+        features[i:i+16] = model(batch_crops)
+
+    return features.detach().numpy()
+
+
+def preprocess_flickr30k_entities():
+    vgg_model = models.vgg16(pretrained=True).cuda()
+    vgg_model.classifier = nn.Sequential(*[vgg_model.classifier[i] for i in range(6)])
+    vgg_model.eval()
+
+    ### TODO: get rid of this when ready
+    flickr_mini = glob.glob('/home/siyi/flickr_mini/*.pkl')
+    for file in tqdm(flickr_mini):
+        fid = file.split('/')[-1][:-4]
+
+    # for fid in tqdm(ALL_IDS):
+        with open(file, 'rb') as f:
+            data = pickle.load(f)
+            
+        proposal_boxes = [list(map(int, box[:4])) for box in data['boxes']]
+
         sent_file = os.path.join(SENT_RAW_DIR, fid+'.txt')
         anno_file = os.path.join(ANNO_RAW_DIR, fid+'.xml')
         sent_data = flickr30k.get_sentence_data(sent_file)
@@ -65,19 +109,23 @@ def generate_annotations():
                 phrases.append(phrase['phrase'])
                 gt_boxes.append(boxes[phrase_id])
 
-        with open(os.path.join(ANNO_DIR, fid+'.pkl'), 'wb') as f:
-            fdata = {'phrases' : phrases, 'gt_boxes' : gt_boxes}
-            pickle.dump(fdata, f)
+        if len(phrases) > 0:
+            with open(os.path.join(ANNO_DIR, fid+'.pkl'), 'wb') as f:
+                fdata = {'phrases'  : phrases, 
+                         'gt_boxes' : gt_boxes,
+                         'proposals': proposal_boxes}
+                pickle.dump(fdata, f)
+
+            features = generate_features(os.path.join(IMG_RAW_DIR, fid+'.jpg'), proposal_boxes, vgg_model)
+            np.save(os.path.join(FEAT_DIR, fid+'.npy'), features)
+
+        else:
+            logging.info("No boxes annotated for %s.jpg" % fid)
+
+        # TODO: only keep proposals that has a significant overlap with one of the GT boxes??
+        # TODO: union the gt boxes for each phrase (if more than one gt box?)
 
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--mode", type=str, choices=["feat", "anno"],default="anno")
-
-    args = parser.parse_args()
-
-    if args.mode == "anno":
-        generate_annotations()
-    else:
-        generate_features()
+    preprocess_flickr30k_entities()
