@@ -31,7 +31,7 @@ FEAT_DIR = 'features'
 ANNO_DIR = 'annotations'
 
 CROP_SIZE = 224
-FEATURE_SIZE = 4096
+FEATURE_SIZE = 4096 # TODO: get rid of this when graph R-CNN ready
 IOU_THRESHOLD = 0.1
 
 
