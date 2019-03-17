@@ -4,15 +4,14 @@ import shutil
 import pickle
 from functools import lru_cache
 
+import numpy as np
 import torch
 import torch.utils.data
-import numpy as np
-
-from language_model import GloVe
+from torch.nn.utils.rnn import pad_sequence
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
-    def __init__(self, image_ids):
+    def __init__(self, image_ids, language_model):
         self.queries = []
         self.proposals = {}
 
@@ -30,8 +29,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
                                          'gt_ppos_id' : ppos_id,
                                          'gt_ppos_all': anno['gt_ppos_all'][i],
                                          'gt_boxes'   : anno['gt_boxes']})
-        # Init language model
-        self.lm = GloVe(os.path.join('models', 'glove.twitter.27B.50d.txt'), dim=50)
+        self.lm = language_model
 
 
     def __len__(self):
@@ -41,19 +39,35 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
     def __getitem__(self, index):
         query = self.queries[index]
 
-        proposal_features = self._get_features(query['image_id'])
-        print(query['phrase'])
-        phrase_features = None
+        proposal_features = torch.FloatTensor(self._get_features(query['image_id'])).cuda()
+        phrase_features = torch.FloatTensor([self.lm.get_word_vector(w) for w in query['phrase']]).cuda()
         # print(self._get_features.cache_info())
 
-        # TODO: put htings onto cuda
-        return query, proposal_features#, phrase_features
+        return query, proposal_features, phrase_features
 
 
     @lru_cache(maxsize=100) 
     def _get_features(self, im_id):
         features = np.load(os.path.join('features', im_id+'.npy'))
-        print(features.shape)
         return features
+
+
+    # TODO: probably not appropriate to keep this fn within this class
+    def collate_fn(self, data):
+        queries, l_proposal_features, l_phrase_features = zip(*data)
+
+        l_proposal_features = torch.stack(l_proposal_features, 0)
+
+        l_phrase_features = pad_sequence(list(l_phrase_features), padding_value=-1).permute(1,0,2)
+
+        return list(queries), l_proposal_features, l_phrase_features
+
+
+
+
+
+
+
+
 
 

@@ -5,9 +5,6 @@ import logging
 import pickle
 import uuid
 
-import flickr30k_entities_utils as flickr30k 
-from util.iou import calc_iou
-
 import numpy as np
 import torch
 from torch import nn
@@ -15,6 +12,10 @@ from torch.autograd import Variable
 from torchvision import models, transforms
 from tqdm import tqdm
 from PIL import Image
+from nltk import word_tokenize
+
+import flickr30k_entities_utils as flickr30k 
+from util.iou import calc_iou
 
 
 # logging configurations
@@ -42,7 +43,6 @@ ALL_IDS = [x.strip() for x in ALL_IDS]
 
 def load_crop(filename, box):
     loader = transforms.Compose([
-        ## TODO: Cropped bbox isn't a square, but VGG requires squared input, is this ok?
         transforms.Resize((CROP_SIZE,CROP_SIZE)),
         transforms.ToTensor(),
     ])
@@ -56,17 +56,17 @@ def load_crop(filename, box):
 
 
 def generate_features(im_file, boxes, model):
-
+    batch_size =32
     crops = [load_crop(im_file, box) for box in boxes]
 
-    features = torch.Tensor(len(crops), FEATURE_SIZE)
+    features = np.empty([len(crops), FEATURE_SIZE])
 
-    for i in range(0, len(crops), 16):
-        batch = crops[i:i+16]
+    for i in range(0, len(crops), batch_size):
+        batch = crops[i:i+batch_size]
         batch_crops = torch.cat(batch)
-        features[i:i+16] = model(batch_crops)
+        features[i:i+batch_size] = model(batch_crops).detach().cpu().numpy()
 
-    return features.detach().numpy()
+    return features
 
 
 def preprocess_flickr30k_entities():
@@ -113,7 +113,7 @@ def preprocess_flickr30k_entities():
 
                 phrase_ids.add(phrase_id)
 
-                phrases.append(phrase['phrase'])
+                phrases.append(word_tokenize(phrase['phrase'].lower()))
                 gt_boxes.append(boxes[phrase_id])
 
                 pos_proposals = set()
@@ -150,6 +150,7 @@ def preprocess_flickr30k_entities():
         # TODO: only keep proposals that has a significant overlap with one of the GT boxes??
         # TODO: union the gt boxes for each phrase (if more than one gt box?)
         # TODO: Compute proposal upper bound when proposal generator is better
+        # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
 
 
 
