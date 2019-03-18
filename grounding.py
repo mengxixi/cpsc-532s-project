@@ -23,18 +23,17 @@ class GroundeR(nn.Module):
 
 
     def forward(self, im_input, h0c0, ph_input, batch_size):
-        ph_in = ph_input.contiguous().view(batch_size, -1, self.lm_emb_size)
-        ph_out, (hn, cn) = self.lstm(ph_in, h0c0)
-
+        ph_out, (hn, cn) = self.lstm(ph_input, h0c0)
+        
         ph_concat = self.ph_proj(hn).permute(1,0,2)
         im_concat = self.im_proj(im_input)
-        
+
         width = int(np.sqrt(self.output_size))
-        out = (ph_concat + im_concat).view(batch_size, self.concat_size, width, width)
+        out = F.relu((ph_concat + im_concat)).view(batch_size, self.concat_size, width, width)
 
         attn_weights_raw = self.attn(out)   # [bs, 1, 10, 10]
-        attn_weights = F.softmax(attn_weights_raw, dim=1)
-        attn_weights = attn_weights.view(batch_size, self.output_size)
+        attn_weights = attn_weights_raw.view(batch_size, self.output_size)
+        attn_weights = F.softmax(attn_weights, dim=1)
 
         return attn_weights
 

@@ -7,7 +7,7 @@ from functools import lru_cache
 import numpy as np
 import torch
 import torch.utils.data
-from torch.nn.utils.rnn import pad_sequence
+from torch.nn.utils.rnn import pack_sequence
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
@@ -52,13 +52,12 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         return features
 
 
-    # TODO: probably not appropriate to keep this fn within this class
     def collate_fn(self, data):
-        queries, l_proposal_features, l_phrase_features = zip(*data)
+        sorted_data = zip(*sorted(data, key=lambda l:len(l[2]), reverse=True))
+        queries, l_proposal_features, l_phrase_features = sorted_data        
 
         l_proposal_features = torch.stack(l_proposal_features, 0)
-
-        l_phrase_features = pad_sequence(list(l_phrase_features), padding_value=-1).permute(1,0,2)
+        l_phrase_features = pack_sequence(list(l_phrase_features))
 
         return list(queries), l_proposal_features, l_phrase_features
 
