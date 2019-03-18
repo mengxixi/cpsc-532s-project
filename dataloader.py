@@ -62,12 +62,3 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
         return list(queries), l_proposal_features, l_phrase_features
 
-
-
-
-
-
-
-
-
-
