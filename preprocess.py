@@ -14,7 +14,7 @@ from tqdm import tqdm
 from PIL import Image
 from nltk import word_tokenize
 
-import flickr30k_entities_utils as flickr30k 
+import util.flickr30k_entities_utils as flickr30k 
 from util.iou import calc_iou
 
 
