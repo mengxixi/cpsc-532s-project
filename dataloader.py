@@ -28,7 +28,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
                                          'phrase'     : anno['phrases'][i],
                                          'gt_ppos_id' : ppos_id,
                                          'gt_ppos_all': anno['gt_ppos_all'][i],
-                                         'gt_boxes'   : anno['gt_boxes']})
+                                         'gt_boxes'   : anno['gt_boxes'][i]})
         self.lm = language_model
 
 
