@@ -2,6 +2,7 @@ import os
 import glob
 import shutil
 import logging
+import re
 import pickle
 import uuid
 
@@ -75,7 +76,7 @@ def preprocess_flickr30k_entities(get_features=True):
     vgg_model.eval()
 
     for fid in tqdm(ALL_IDS):
-        file = os.path.join(IMG_RAW_DIR, 'proposals', fidc+'.pkl')
+        file = os.path.join(IMG_RAW_DIR, 'proposals', fid+'.pkl')
         with open(file, 'rb') as f:
             data = pickle.load(f)
             
@@ -108,7 +109,8 @@ def preprocess_flickr30k_entities(get_features=True):
 
                 phrase_ids.add(phrase_id)
 
-                phrases.append(word_tokenize(phrase['phrase'].lower()))
+                clean_phrase = re.sub(u"(\u2018|\u2019)", "'", phrase['phrase'].lower())
+                phrases.append(word_tokenize(clean_phrase))
                 gt_boxes.append(boxes[phrase_id])
 
                 pos_proposals = set()

@@ -28,8 +28,8 @@ BATCH_SIZE = 512
 N_EPOCHS = 20
 LR = 1e-2
 
-PRINT_EVERY = 1000 # Every x examples
-EVALUATE_EVERY = 1000
+PRINT_EVERY = 1000 # Every x iterations
+EVALUATE_EVERY = 50000
 
 
 def get_dataloader(im_ids, lm):
@@ -75,32 +75,40 @@ def train():
 
             batch_size = len(b_queries)
 
+            # Foward
             lstm_h0 = grounder.initHidden(batch_size)
             lstm_c0 = grounder.initCell(batch_size)
             attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
 
             loss = criterion(torch.log(attn_weights), b_y)
-            writer.add_scalar('loss', loss.item(), epoch*len(train_loader)+batch_idx)
 
+            # Backward and update
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
 
             running_loss += loss 
+
+            # Log losses
             print_batches = PRINT_EVERY//BATCH_SIZE
             if batch_idx % print_batches == print_batches-1:
+                writer.add_scalar('loss', loss.item(), epoch*len(train_loader)+batch_idx)
                 logging.info("Epoch %d, query %d, loss: %.3f" % (epoch+1, (batch_idx+1)*BATCH_SIZE, running_loss/print_batches))
                 running_loss = 0
 
-            # evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
-            # if batch_idx % evaluate_batches == evaluate_batches-1:
-            #     # TODO: Evaluate on validation data, log score, show image
-            #     acc = evaluate.evaluate(grounder, writer, train_loader)
-            #     if acc > best_acc:
-            #         torch.save(grounder.state_dict(), os.path.join('models', 'grounder.ckpt'))
-            #         best_acc = acc
+            # Log evaluations
+            evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
+            if batch_idx % evaluate_batches == evaluate_batches-1:
+                acc = evaluate.evaluate(grounder, writer, train_loader)
+                writer.add_scalar('val_acc', acc, epoch*len(train_loader)+batch_idx)
+                logging.info("Validation accuracy: %.3f, best_acc: %.3f" % (acc, best_acc))
 
-            #     grounder.train()
+                # Improved on validation set
+                if acc > best_acc:
+                    torch.save(grounder.state_dict(), os.path.join('models', 'grounder.ckpt'))
+                    best_acc = acc
+
+                grounder.train()
 
     writer.close()
 
