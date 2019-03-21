@@ -88,19 +88,20 @@ def train():
             optimizer.zero_grad()
 
             running_loss += loss 
+            global_step = epoch*len(train_loader)+batch_idx
 
             # Log losses
             print_batches = PRINT_EVERY//BATCH_SIZE
             if batch_idx % print_batches == print_batches-1:
-                writer.add_scalar('loss', loss.item(), epoch*len(train_loader)+batch_idx)
+                writer.add_scalar('loss', loss.item(), global_step)
                 logging.info("Epoch %d, query %d, loss: %.3f" % (epoch+1, (batch_idx+1)*BATCH_SIZE, running_loss/print_batches))
                 running_loss = 0
 
             # Log evaluations
             evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
             if batch_idx % evaluate_batches == evaluate_batches-1:
-                acc = evaluate.evaluate(grounder, writer, train_loader)
-                writer.add_scalar('val_acc', acc, epoch*len(train_loader)+batch_idx)
+                acc = evaluate.evaluate(grounder, val_loader, summary_writer=writer, global_step=global_step)
+                writer.add_scalar('val_acc', acc, global_step)
                 logging.info("Validation accuracy: %.3f, best_acc: %.3f" % (acc, best_acc))
 
                 # Improved on validation set

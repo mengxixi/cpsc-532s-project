@@ -82,11 +82,11 @@ if __name__ == "__main__":
 
     val_ids = [x.strip() for x in val_ids if x not in nobbox_ids][:30]
     lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
-    train_loader = train.get_dataloader(val_ids, lm)
+    val_loader = train.get_dataloader(val_ids, lm)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
 
-    acc = evaluate(grounder, train_loader, writer, n_samples=20, global_step=20)
+    acc = evaluate(grounder, val_loader, writer, n_samples=20, global_step=20)
     print("Accuracy: %.3f" % acc)
 
