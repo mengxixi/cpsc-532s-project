@@ -76,7 +76,10 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
 class QuerySampler(torch.utils.data.Sampler):
     """
-    The idea is that we randomly shuffle the list of images first. Then we construct the query pairs by grabbing phrases from each image in order after shuffle. This way we reduce disk IO, since each image's proposal features now only needs to be loaded once per epoch (after caching).
+    The idea is that we randomly shuffle the list of images first. Then we 
+    construct the query pairs by grabbing phrases from each image in order 
+    after shuffle. This way we reduce disk IO, since each image's proposal
+    features now only needs to be loaded once per epoch (after caching).
 
     Example:
 
@@ -87,7 +90,7 @@ class QuerySampler(torch.utils.data.Sampler):
     [10, 11, 12, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4]
     corresponding to shuffled images [d, b, c, a]
 
-        """
+    """
 
     def __init__(self, data_source):
         super().__init__(data_source)
