@@ -57,7 +57,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     loader = transforms.ToTensor()
     for (query, pred) in zip(sample_queries, sample_preds):
         image_id = query['image_id']
-        proposal_bboxes = train_loader.dataset.proposals[image_id]
+        proposal_bboxes = validation_loader.dataset.proposals[image_id]
         filename = os.path.join(IMG_RAW_DIR, image_id+'.jpg')
 
         image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], ' '.join(query['phrase']))
@@ -66,7 +66,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
         if not global_step:
             image.save(os.path.join('tmp', '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
         else:
-            writer.add_image('validation', loader(image), global_step)
+            summary_writer.add_image('validation', loader(image), global_step)
 
     return acc
 
