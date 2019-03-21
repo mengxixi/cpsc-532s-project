@@ -8,7 +8,7 @@ import numpy as np
 class GroundeR(nn.Module):
     def __init__(self, im_feature_size=4096, lm_emb_size=200, hidden_size=150, concat_size=128, output_size=100):
 
-        super(GroundeR, self).__init__()
+        super().__init__()
 
         self.im_feature_size = im_feature_size
         self.lm_emb_size = lm_emb_size

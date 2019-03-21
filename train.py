@@ -1,5 +1,7 @@
 import os
+import sys
 import glob
+import logging
 from datetime import datetime
 
 import numpy as np
@@ -8,19 +10,26 @@ import torch.utils.data
 from tqdm import tqdm, tnrange
 from tensorboardX import SummaryWriter
 
-from dataloader import Flickr30K_Entities
+import evaluate
+from dataloader import Flickr30K_Entities, QuerySampler
 from language_model import GloVe
 from grounding import GroundeR
-from evaluate import evaluate
 
+
+# logging configurations
+LOG_FORMAT = "%(asctime)s %(message)s"
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
+
+# directories
+FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
 
 # TODO: Refactor constants later
-BATCH_SIZE = 32
-N_EPOCHS = 10
-LR = 1e-3
+BATCH_SIZE = 512
+N_EPOCHS = 20
+LR = 1e-2
 
-PRINT_EVERY = 50 # Every x examples
-EVALUATE_EVERY = 50
+PRINT_EVERY = 1000 # Every x examples
+EVALUATE_EVERY = 1000
 
 
 def get_dataloader(im_ids, lm):
@@ -28,16 +37,25 @@ def get_dataloader(im_ids, lm):
     loader = torch.utils.data.DataLoader(
         dataset, 
         batch_size = BATCH_SIZE, 
-        shuffle=True,
-        collate_fn=dataset.collate_fn)
+        collate_fn=dataset.collate_fn,
+        sampler=QuerySampler(dataset))
     return loader
 
 
 def train():
-    train_ids = [file.split('/')[-1][:-4] for file in glob.glob('/home/siyi/flickr_mini/*.pkl')]
+
+    with open(os.path.join(FLICKR30K_ENTITIES, 'train.txt')) as f1, open(os.path.join(FLICKR30K_ENTITIES, 'val.txt')) as f2, open(os.path.join(FLICKR30K_ENTITIES, 'nobbox.txt')) as f3:
+        # TODO: Format this line nicely
+        train_ids = f1.readlines()
+        val_ids = f2.readlines()
+        nobbox_ids = f3.readlines()
+
+    train_ids = [x.strip() for x in train_ids if x not in nobbox_ids]
+    val_ids = [x.strip() for x in val_ids if x not in nobbox_ids]
+
     lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
     train_loader = get_dataloader(train_ids, lm)
-
+    val_loader = get_dataloader(val_ids, lm)
 
     grounder = GroundeR().cuda()
     optimizer = torch.optim.Adam(grounder.parameters(), lr=LR)
@@ -47,7 +65,8 @@ def train():
     writer = SummaryWriter(os.path.join('logs', subdir))
 
     # Train loop
-    for epoch in range(N_EPOCHS):
+    best_acc = 0.0
+    for epoch in tqdm(range(N_EPOCHS), file=sys.stdout):
         running_loss = 0
 
         for batch_idx, data in enumerate(train_loader):
@@ -70,22 +89,21 @@ def train():
             running_loss += loss 
             print_batches = PRINT_EVERY//BATCH_SIZE
             if batch_idx % print_batches == print_batches-1:
-                # TODO: Use logging.log_info later
-                print("Epoch %d, query %d, loss: %.3f" % (epoch+1, (batch_idx+1)*BATCH_SIZE, running_loss/print_batches))
+                logging.info("Epoch %d, query %d, loss: %.3f" % (epoch+1, (batch_idx+1)*BATCH_SIZE, running_loss/print_batches))
                 running_loss = 0
 
-            evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
-            if batch_idx % evaluate_batches == evaluate_batches-1:
-                # TODO: Evaluate on validation data, log score, show image
-                # TODO: Save model if acc got better
-                accuracy = evaluate(grounder, writer, train_loader)
-                grounder.train()
+            # evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
+            # if batch_idx % evaluate_batches == evaluate_batches-1:
+            #     # TODO: Evaluate on validation data, log score, show image
+            #     acc = evaluate.evaluate(grounder, writer, train_loader)
+            #     if acc > best_acc:
+            #         torch.save(grounder.state_dict(), os.path.join('models', 'grounder.ckpt'))
+            #         best_acc = acc
 
-
-        torch.save(grounder.state_dict(), os.path.join('models', 'grounder.ckpt'))
-
+            #     grounder.train()
 
     writer.close()
+
 
 
 if __name__ == "__main__":

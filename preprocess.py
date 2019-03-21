@@ -69,22 +69,17 @@ def generate_features(im_file, boxes, model):
     return features
 
 
-def preprocess_flickr30k_entities():
+def preprocess_flickr30k_entities(get_features=True):
     vgg_model = models.vgg16(pretrained=True).cuda()
     vgg_model.classifier = nn.Sequential(*[vgg_model.classifier[i] for i in range(6)])
     vgg_model.eval()
 
-    ### TODO: get rid of this when ready
-    flickr_mini = glob.glob('/home/siyi/flickr_mini/*.pkl')
-    for file in tqdm(flickr_mini):
-        fid = file.split('/')[-1][:-4]
-
-    # for fid in tqdm(ALL_IDS):
+    for fid in tqdm(ALL_IDS):
+        file = os.path.join(IMG_RAW_DIR, 'proposals', fidc+'.pkl')
         with open(file, 'rb') as f:
             data = pickle.load(f)
             
         proposal_boxes = [list(map(int, box[:4])) for box in data['boxes']]
-        # proposal_boxes = list(filter(lambda box: not all(v==0 for v in box), proposal_boxes))
 
         sent_file = os.path.join(SENT_RAW_DIR, fid+'.txt')
         anno_file = os.path.join(ANNO_RAW_DIR, fid+'.xml')
@@ -141,8 +136,9 @@ def preprocess_flickr30k_entities():
 
                 pickle.dump(fdata, f)
 
-            features = generate_features(os.path.join(IMG_RAW_DIR, fid+'.jpg'), proposal_boxes, vgg_model)
-            np.save(os.path.join(FEAT_DIR, fid+'.npy'), features)
+            if get_features:
+                features = generate_features(os.path.join(IMG_RAW_DIR, fid+'.jpg'), proposal_boxes, vgg_model)
+                np.save(os.path.join(FEAT_DIR, fid+'.npy'), features)
 
         else:
             logging.info("No boxes annotated for %s.jpg" % fid)
@@ -155,4 +151,4 @@ def preprocess_flickr30k_entities():
 
 
 if __name__ == "__main__":
-    preprocess_flickr30k_entities()
+    preprocess_flickr30k_entities(get_features=False)
