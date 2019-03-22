@@ -80,7 +80,7 @@ if __name__ == "__main__":
         val_ids = f1.readlines()
         nobbox_ids = f2.readlines()
 
-    val_ids = [x.strip() for x in val_ids if x not in nobbox_ids][:30]
+    val_ids = [x.strip() for x in val_ids if x not in nobbox_ids]
     lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
     val_loader = train.get_dataloader(val_ids, lm)
 

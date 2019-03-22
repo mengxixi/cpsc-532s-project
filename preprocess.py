@@ -34,7 +34,7 @@ ANNO_DIR = 'annotations'
 
 CROP_SIZE = 224
 FEATURE_SIZE = 4096 # TODO: get rid of this when graph R-CNN ready
-IOU_THRESHOLD = 0.1
+IOU_THRESHOLD = 0.5
 
 
 with open('/home/siyi/flickr30k_entities/all.txt') as f:
@@ -75,8 +75,13 @@ def preprocess_flickr30k_entities(get_features=True):
     vgg_model.classifier = nn.Sequential(*[vgg_model.classifier[i] for i in range(6)])
     vgg_model.eval()
 
+    proposal_ub = 0
+    n_queries = 0
     for fid in tqdm(ALL_IDS):
         file = os.path.join(IMG_RAW_DIR, 'proposals', fid+'.pkl')
+        if not os.path.exists(file):
+            continue
+
         with open(file, 'rb') as f:
             data = pickle.load(f)
             
@@ -128,6 +133,10 @@ def preprocess_flickr30k_entities(get_features=True):
                 gt_ppos_all.append(list(pos_proposals))
                 gt_ppos_ids.append(gt_ppos_id)
 
+                n_queries += 1
+                if gt_ppos_id != -1:
+                    proposal_ub += 1
+
         if len(phrases) > 0:
             with open(os.path.join(ANNO_DIR, fid+'.pkl'), 'wb') as f:
                 fdata = {'phrases'      : phrases, 
@@ -150,6 +159,8 @@ def preprocess_flickr30k_entities(get_features=True):
         # TODO: Compute proposal upper bound when proposal generator is better
         # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
 
+    logging.info("Number of queries: %d" % n_queries)
+    logging.info("Proposal upper-bound: %.3f" % (proposal_ub/n_queries))
 
 
 if __name__ == "__main__":

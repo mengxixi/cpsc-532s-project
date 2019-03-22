@@ -17,16 +17,22 @@ class GroundeR(nn.Module):
         self.output_size = output_size
 
         self.lstm = nn.LSTM(input_size=lm_emb_size, hidden_size=hidden_size, batch_first=True)
+        self.ph_bn = nn.BatchNorm1d(hidden_size)
+        self.im_bn = nn.BatchNorm1d(im_feature_size)
+
         self.ph_proj = nn.Linear(hidden_size, concat_size)
         self.im_proj = nn.Linear(im_feature_size, concat_size)
         self.attn = nn.Conv2d(concat_size, 1, 1)
 
+        # self.init_params()
 
     def forward(self, im_input, h0c0, ph_input, batch_size):
         ph_out, (hn, cn) = self.lstm(ph_input, h0c0)
-        
-        ph_concat = self.ph_proj(hn).permute(1,0,2)
-        im_concat = self.im_proj(im_input)
+        hn = self.ph_bn(hn.permute(1,2,0)) 
+        ph_concat = self.ph_proj(hn.permute(0,2,1))
+
+        im_bn = self.im_bn(im_input.permute(0,2,1))
+        im_concat = self.im_proj(im_bn.permute(0,2,1))
 
         width = int(np.sqrt(self.output_size))
         out = F.relu((ph_concat + im_concat)).view(batch_size, self.concat_size, width, width)
@@ -44,3 +50,12 @@ class GroundeR(nn.Module):
     
     def initCell(self, batch_size):
         return torch.zeros(1, batch_size, self.hidden_size).cuda()
+
+
+    # def init_params(self):
+    #     # nn.init.uniform_(self.lstm.weight)
+    #     nn.init.xavier_normal_(self.ph_proj.weight)
+    #     nn.init.xavier_normal_(self.im_proj.weight)
+
+
+

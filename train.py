@@ -7,8 +7,9 @@ from datetime import datetime
 import numpy as np
 import torch
 import torch.utils.data
-from tqdm import tqdm, tnrange
+from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
+from tqdm import tqdm
 
 import evaluate
 from dataloader import Flickr30K_Entities, QuerySampler
@@ -24,12 +25,13 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
 
 # TODO: Refactor constants later
-BATCH_SIZE = 512
+BATCH_SIZE = 64
 N_EPOCHS = 20
-LR = 1e-2
+LR = 1e-4
+# WEIGHT_DECAY = 5e-4
 
-PRINT_EVERY = 1000 # Every x iterations
-EVALUATE_EVERY = 50000
+PRINT_EVERY = 100 # Every x iterations
+EVALUATE_EVERY = 10000
 
 
 def get_dataloader(im_ids, lm):
@@ -59,6 +61,7 @@ def train():
 
     grounder = GroundeR().cuda()
     optimizer = torch.optim.Adam(grounder.parameters(), lr=LR)
+    # scheduler = MultiStepLR(optimizer, milestones=[2, 10, 15])
     criterion = torch.nn.NLLLoss()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
@@ -67,6 +70,9 @@ def train():
     # Train loop
     best_acc = 0.0
     for epoch in tqdm(range(N_EPOCHS), file=sys.stdout):
+        writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
+        # scheduler.step()
+
         running_loss = 0
 
         for batch_idx, data in enumerate(train_loader):
