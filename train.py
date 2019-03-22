@@ -106,8 +106,9 @@ def train():
             # Log evaluations
             evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
             if batch_idx % evaluate_batches == evaluate_batches-1:
-                acc = evaluate.evaluate(grounder, val_loader, summary_writer=writer, global_step=global_step)
+                acc, val_loss = evaluate.evaluate(grounder, val_loader, summary_writer=writer, global_step=global_step)
                 writer.add_scalar('val_acc', acc, global_step)
+                writer.add_scalar('val_loss', val_loss, global_step)
                 logging.info("Validation accuracy: %.3f, best_acc: %.3f" % (acc, best_acc))
 
                 # Improved on validation set
