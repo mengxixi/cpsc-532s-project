@@ -48,12 +48,12 @@ def train():
 
     with open(os.path.join(FLICKR30K_ENTITIES, 'train.txt')) as f1, open(os.path.join(FLICKR30K_ENTITIES, 'val.txt')) as f2, open(os.path.join(FLICKR30K_ENTITIES, 'nobbox.txt')) as f3:
         # TODO: Format this line nicely
-        train_ids = f1.readlines()
-        val_ids = f2.readlines()
-        nobbox_ids = f3.readlines()
+        train_ids = f1.read().splitlines()
+        val_ids = f2.read().splitlines()
+        nobbox_ids = f3.read().splitlines()
 
-    train_ids = [x.strip() for x in train_ids if x not in nobbox_ids]
-    val_ids = [x.strip() for x in val_ids if x not in nobbox_ids]
+    train_ids = [x for x in train_ids if x not in nobbox_ids]
+    val_ids = [x for x in val_ids if x not in nobbox_ids]
 
     lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
     train_loader = get_dataloader(train_ids, lm)

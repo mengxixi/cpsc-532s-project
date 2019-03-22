@@ -1,9 +1,15 @@
 from PIL import Image, ImageDraw, ImageFont
 
 
-def inference_image(image_fname, gt_boxes, pred_boxes, phrase):
+def inference_image(image_fname, gt_boxes, gt_prop_boxes, pred_boxes, phrase):
     image = Image.open(image_fname).convert('RGB')
     draw = ImageDraw.Draw(image)
+
+    # Draw the proposals that I'm supposed to predict
+    # Draw before predicted boxes, so if we predicted correctly, this won't
+    # show up
+    for box in gt_prop_boxes:
+        drawrect(draw, box, outline='yellow', width=3)
 
     # Draw predicted boxes
     for box in pred_boxes:
@@ -12,6 +18,7 @@ def inference_image(image_fname, gt_boxes, pred_boxes, phrase):
     # Draw gt boxes
     for box in gt_boxes:
         drawrect(draw, box, outline='green', width=3)
+
 
     # Write text
     strip_h = 25

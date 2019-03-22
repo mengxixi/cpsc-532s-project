@@ -60,7 +60,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
         proposal_bboxes = validation_loader.dataset.proposals[image_id]
         filename = os.path.join(IMG_RAW_DIR, image_id+'.jpg')
 
-        image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], ' '.join(query['phrase']))
+        image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], ' '.join(query['phrase']))
 
         # Saving
         if not global_step:
