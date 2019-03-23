@@ -47,16 +47,16 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             # Get topk
             topv, topi = attn_weights.topk(1)
             # TODO: Log the probabilities as well
-
-            pred = topi.squeeze(1).cpu().numpy()
-            n_correct += sum(pred == y.cpu().numpy())
+            pred = topi.squeeze(1)
+            n_correct += sum(pred == y)
 
             # Save predictions for drawing
             queries.extend(b_queries)
-            preds.extend(pred)
+            preds.extend(pred.cpu().numpy())
+
 
     n_queries = len(validation_loader.dataset)
-    acc = n_correct/n_queries
+    acc = n_correct.float()/n_queries
     val_loss = val_loss/n_queries
 
     # Drawing samples
