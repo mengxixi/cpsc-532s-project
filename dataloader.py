@@ -12,12 +12,15 @@ from torch.nn.utils.rnn import pack_sequence
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
-    def __init__(self, image_ids, language_model):
+    def __init__(self, image_ids, language_model=None, vocabulary=None):
         super().__init__()
 
         self.queries = []
         self.proposals = {}
         self.img2idx = {}
+        # TODO: Refactor vocabulary to preprocessing or somewhere outside
+        # this class
+        self.vocabulary = vocabulary if vocabulary else {'UNK' : 0} 
 
         for im_id in image_ids:
             with open(os.path.join('annotations', im_id+'.pkl'), 'rb') as f:
@@ -29,17 +32,25 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
             for i, ppos_id in enumerate(anno['gt_ppos_ids']):
                 if ppos_id != -1:
                     # Ignore the queries that don't have a positive proposal
+                    phrase = anno['phrases'][i]
                     self.queries.append({'image_id'   : im_id, 
-                                         'phrase'     : anno['phrases'][i],
+                                         'phrase'     : phrase,
                                          'gt_ppos_id' : ppos_id,
                                          'gt_ppos_all': anno['gt_ppos_all'][i],
                                          'gt_boxes'   : anno['gt_boxes'][i]})
                     query_count += 1
+                    if not language_model and not vocabulary:
+                        for word in phrase:
+                            if word not in self.vocabulary:
+                                self.vocabulary[word] = len(self.vocabulary)
 
             if query_count > 0:
                 self.img2idx[im_id] = {'start' : len(self.queries)-query_count,
                                        'len'   : query_count}
 
+        # with open(os.path.join('tmp', 'vocabulary.pkl'), 'wb') as f:
+        #     pickle.dump(self.vocabulary, f)
+        # quit()
         self.image_ids = list(self.img2idx.keys())
         self.lm = language_model
 
@@ -52,7 +63,19 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         query = self.queries[index]
 
         proposal_features = torch.FloatTensor(self._get_features(query['image_id'])).cuda()
-        phrase_features = torch.FloatTensor([self.lm.get_word_vector(w) for w in query['phrase']]).cuda()
+        if not self.lm:
+            vocab_size = len(self.vocabulary)
+            phrase_features = torch.zeros(vocab_size).repeat(len(query['phrase']),1).cuda()
+            indices = []
+            for w in query['phrase']:
+                if w not in self.vocabulary:
+                    indices.append(0)
+                else:
+                    indices.append(self.vocabulary[w])
+            phrase_features.scatter_(1, torch.tensor(indices).unsqueeze(1).cuda(), 1)
+
+        else:
+            phrase_features = torch.FloatTensor([self.lm.get_word_vector(w) for w in query['phrase']]).cuda()
         # print(self._get_features.cache_info())
 
         return query, proposal_features, phrase_features

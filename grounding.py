@@ -6,7 +6,7 @@ import numpy as np
 
 
 class GroundeR(nn.Module):
-    def __init__(self, im_feature_size=4096, lm_emb_size=200, hidden_size=50, proj_size=50, output_size=100):
+    def __init__(self, im_feature_size=4096, lm_emb_size=200, hidden_size=50, proj_size=128, output_size=100):
 
         super().__init__()
 
@@ -21,7 +21,7 @@ class GroundeR(nn.Module):
         self.im_bn = nn.BatchNorm1d(im_feature_size)
 
         self.feat_proj = nn.Linear(hidden_size+im_feature_size, proj_size)
-        self.attn = nn.Conv2d(proj_size, 1, 1)
+        self.attn = nn.Linear(proj_size, 1)
 
         self.init_params()
 
@@ -36,11 +36,10 @@ class GroundeR(nn.Module):
 
         width = int(np.sqrt(self.output_size))
         out = self.feat_proj(feat_concat.permute(0,2,1))
-        out = F.relu(out).view(batch_size, self.proj_size, width, width)
+        out = F.relu(out)
 
-        attn_weights_raw = self.attn(out)   # [bs, 1, 10, 10]
-        attn_weights = attn_weights_raw.view(batch_size, self.output_size)
-        attn_weights = F.softmax(attn_weights, dim=1)
+        attn_weights_raw = self.attn(out).squeeze(2) # [bs, 100, 1]
+        attn_weights = F.softmax(attn_weights_raw, dim=1)
 
         return attn_weights
 

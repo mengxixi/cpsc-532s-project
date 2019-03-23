@@ -1,6 +1,7 @@
 import os
 import glob
 import random
+import pickle
 from datetime import datetime
 
 import numpy as np
@@ -80,8 +81,6 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
 
 if __name__ == "__main__":    
-    grounder = GroundeR().cuda()
-    grounder.load_state_dict(torch.load(os.path.join("models", "grounder.ckpt")))
 
     with open(os.path.join(FLICKR30K_ENTITIES, 'val.txt')) as f1, open(os.path.join(FLICKR30K_ENTITIES, 'nobbox.txt')) as f2:
         # TODO: Format this line nicely
@@ -89,8 +88,13 @@ if __name__ == "__main__":
         nobbox_ids = f2.read().splitlines()
 
     val_ids = [x for x in val_ids if x not in nobbox_ids]
-    lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
-    val_loader = train.get_dataloader(val_ids, lm)
+    # lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
+    with open('tmp/vocabulary.pkl', 'rb') as f:
+        vocabulary = pickle.load(f)
+    val_loader = train.get_dataloader(val_ids, vocabulary=vocabulary)
+
+    grounder = GroundeR(lm_emb_size=len(vocabulary)).cuda()
+    grounder.load_state_dict(torch.load(os.path.join("models", "grounder.ckpt")))
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))

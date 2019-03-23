@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import logging
+import pickle
 from datetime import datetime
 
 import numpy as np
@@ -23,6 +24,7 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 
 # directories
 FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
+VOCAB_FILE = 'tmp/vocabulary.pkl'
 
 # TODO: Refactor constants later
 BATCH_SIZE = 64
@@ -34,8 +36,8 @@ PRINT_EVERY = 100 # Every x iterations
 EVALUATE_EVERY = 10000
 
 
-def get_dataloader(im_ids, lm):
-    dataset = Flickr30K_Entities(im_ids, language_model=lm)
+def get_dataloader(im_ids, lm=None, vocabulary=None):
+    dataset = Flickr30K_Entities(im_ids, language_model=lm, vocabulary=vocabulary)
     loader = torch.utils.data.DataLoader(
         dataset, 
         batch_size = BATCH_SIZE, 
@@ -55,11 +57,14 @@ def train():
     train_ids = [x for x in train_ids if x not in nobbox_ids]
     val_ids = [x for x in val_ids if x not in nobbox_ids]
 
-    lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
-    train_loader = get_dataloader(train_ids, lm)
-    val_loader = get_dataloader(val_ids, lm)
+    if os.path.exists(VOCAB_FILE):
+        with open(VOCAB_FILE, 'rb') as f:
+            vocabulary = pickle.load(f)
+    # lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
+    train_loader = get_dataloader(train_ids)
+    val_loader = get_dataloader(val_ids, vocabulary=vocabulary)
 
-    grounder = GroundeR().cuda()
+    grounder = GroundeR(lm_emb_size=len(vocabulary)).cuda()
     optimizer = torch.optim.Adam(grounder.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     # scheduler = MultiStepLR(optimizer, milestones=[2, 10, 15])
     criterion = torch.nn.NLLLoss()
