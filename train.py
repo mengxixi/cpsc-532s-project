@@ -61,7 +61,7 @@ def train():
 
     grounder = GroundeR().cuda()
     optimizer = torch.optim.Adam(grounder.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    scheduler = MultiStepLR(optimizer, milestones=[5, 10, 15], gamma=0.5)
+    scheduler = MultiStepLR(optimizer, milestones=[15])
     criterion = torch.nn.NLLLoss()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
