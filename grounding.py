@@ -52,8 +52,8 @@ class GroundeR(nn.Module):
 
     def init_params(self):
         nn.init.uniform_(self.lstm.weight_ih_l0)
-        nn.init.xavier_normal_(self.ph_proj.weight)
-        nn.init.xavier_normal_(self.im_proj.weight)
+        nn.init.xavier_uniform_(self.ph_proj.weight)
+        nn.init.xavier_uniform_(self.im_proj.weight)
         nn.init.kaiming_normal_(self.attn.weight)
 
 

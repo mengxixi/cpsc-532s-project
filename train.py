@@ -27,7 +27,7 @@ FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
 # TODO: Refactor constants later
 BATCH_SIZE = 64
 N_EPOCHS = 20
-LR = 1e-2
+LR = 1e-3
 WEIGHT_DECAY = 5e-4
 
 PRINT_EVERY = 100 # Every x iterations

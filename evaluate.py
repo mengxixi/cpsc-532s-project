@@ -51,6 +51,10 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             pred = topi.squeeze(1)
             n_correct += sum(pred == y)
 
+            # print(torch.log(attn_weights[0]))
+            # print(y[0])
+            # print(pred[0])
+
             # Save predictions for drawing
             queries.extend(b_queries)
             preds.extend(pred.cpu().numpy())
