@@ -6,7 +6,7 @@ import numpy as np
 
 
 class GroundeR(nn.Module):
-    def __init__(self, im_feature_size=4096, lm_emb_size=50, hidden_size=50, concat_size=128, output_size=100):
+    def __init__(self, im_feature_size=4096, lm_emb_size=200, hidden_size=50, concat_size=128, output_size=100):
 
         super().__init__()
 
@@ -16,7 +16,7 @@ class GroundeR(nn.Module):
         self.concat_size = concat_size
         self.output_size = output_size
 
-        self.lstm = nn.LSTM(input_size=lm_emb_size, hidden_size=hidden_size, batch_first=True)
+        self.lstm = nn.LSTM(input_size=lm_emb_size, hidden_size=hidden_size, batch_first=True, dropout=0.5)
         self.ph_bn = nn.BatchNorm1d(hidden_size)
         self.im_bn = nn.BatchNorm1d(im_feature_size)
 
