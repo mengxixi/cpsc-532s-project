@@ -6,7 +6,7 @@ import numpy as np
 
 
 class GroundeR(nn.Module):
-    def __init__(self, im_feature_size=4096, lm_emb_size=200, hidden_size=150, concat_size=128, output_size=100):
+    def __init__(self, im_feature_size=4096, lm_emb_size=50, hidden_size=50, concat_size=128, output_size=100):
 
         super().__init__()
 
