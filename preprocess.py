@@ -114,7 +114,7 @@ def preprocess_flickr30k_entities(get_features=True):
 
                 phrase_ids.add(phrase_id)
 
-                clean_phrase = re.sub(u"(\u2018|\u2019)", "'", phrase['phrase'].lower())
+                clean_phrase = re.sub(u"(\u2018|\u2019)", "'", phrase['phrase'])
                 phrases.append(word_tokenize(clean_phrase))
                 gt_boxes.append(boxes[phrase_id])
 

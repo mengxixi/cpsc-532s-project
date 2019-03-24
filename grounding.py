@@ -22,9 +22,9 @@ class GroundeR(nn.Module):
 
         self.ph_proj = nn.Linear(hidden_size, concat_size)
         self.im_proj = nn.Linear(im_feature_size, concat_size)
-        self.attn = nn.Conv2d(concat_size, 1, 1)
+        self.attn = nn.Linear(concat_size, 1)
 
-        # self.init_params()
+        self.init_params()
 
     def forward(self, im_input, h0c0, ph_input, batch_size):
         ph_out, (hn, cn) = self.lstm(ph_input, h0c0)
@@ -34,12 +34,10 @@ class GroundeR(nn.Module):
         im_bn = self.im_bn(im_input.permute(0,2,1))
         im_concat = self.im_proj(im_bn.permute(0,2,1))
 
-        width = int(np.sqrt(self.output_size))
-        out = F.relu((ph_concat + im_concat)).view(batch_size, self.concat_size, width, width)
+        out = F.relu((ph_concat + im_concat))
 
-        attn_weights_raw = self.attn(out)   # [bs, 1, 10, 10]
-        attn_weights = attn_weights_raw.view(batch_size, self.output_size)
-        attn_weights = F.softmax(attn_weights, dim=1)
+        attn_weights_raw = self.attn(out).squeeze(2) # [bs, 100, 1]
+        attn_weights = F.softmax(attn_weights_raw, dim=1)
 
         return attn_weights
 
@@ -52,10 +50,12 @@ class GroundeR(nn.Module):
         return torch.zeros(1, batch_size, self.hidden_size).cuda()
 
 
-    # def init_params(self):
-    #     # nn.init.uniform_(self.lstm.weight)
-    #     nn.init.xavier_normal_(self.ph_proj.weight)
-    #     nn.init.xavier_normal_(self.im_proj.weight)
+    def init_params(self):
+        nn.init.uniform_(self.lstm.weight_ih_l0)
+        nn.init.xavier_normal_(self.ph_proj.weight)
+        nn.init.xavier_normal_(self.im_proj.weight)
+        nn.init.kaiming_normal_(self.attn.weight)
+
 
 
 
