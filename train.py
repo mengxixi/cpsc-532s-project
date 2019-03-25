@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import logging
+import pickle
 from datetime import datetime
 
 import numpy as np
@@ -23,6 +24,8 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 
 # directories
 FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
+PRETRAINED_EMBEDDINGS = 'tmp/embedding.npy'
+WORD2IDX = 'tmp/word2idx.pkl'
 
 # TODO: Refactor constants later
 BATCH_SIZE = 64
@@ -34,8 +37,8 @@ PRINT_EVERY = 100 # Every x iterations
 EVALUATE_EVERY = 10000
 
 
-def get_dataloader(im_ids, lm):
-    dataset = Flickr30K_Entities(im_ids, language_model=lm)
+def get_dataloader(im_ids, word2idx=None):
+    dataset = Flickr30K_Entities(im_ids, word2idx=word2idx)
     loader = torch.utils.data.DataLoader(
         dataset, 
         batch_size = BATCH_SIZE, 
@@ -46,6 +49,7 @@ def get_dataloader(im_ids, lm):
 
 def train():
 
+    # Load datasets
     with open(os.path.join(FLICKR30K_ENTITIES, 'train.txt')) as f1, open(os.path.join(FLICKR30K_ENTITIES, 'val.txt')) as f2, open(os.path.join(FLICKR30K_ENTITIES, 'nobbox.txt')) as f3:
         # TODO: Format this line nicely
         train_ids = f1.read().splitlines()
@@ -55,17 +59,31 @@ def train():
     train_ids = [x for x in train_ids if x not in nobbox_ids]
     val_ids = [x for x in val_ids if x not in nobbox_ids]
 
-    lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
-    train_loader = get_dataloader(train_ids, lm)
-    val_loader = get_dataloader(val_ids, lm)
+    train_loader = get_dataloader(train_ids)
+    word2idx = train_loader.dataset.word2idx
+    with open(WORD2IDX, 'wb') as f:
+        pickle.dump(word2idx, f)
+    val_loader = get_dataloader(val_ids, word2idx=word2idx)
 
-    grounder = GroundeR().cuda()
+
+    # Load pretrained embeddings
+    if os.path.exists(PRETRAINED_EMBEDDINGS):
+        pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
+    else:
+        lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
+        pretrained_embeddings = np.array([lm.get_word_vector(w) for w in word2idx.keys()])
+        np.save(PRETRAINED_EMBEDDINGS, pretrained_embeddings)
+
+
+    # Model, optimizer, etc.
+    grounder = GroundeR(pretrained_embeddings).cuda()
     optimizer = torch.optim.Adam(grounder.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scheduler = MultiStepLR(optimizer, milestones=[15])
     criterion = torch.nn.NLLLoss()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
+
 
     # Train loop
     best_acc = 0.0
@@ -77,7 +95,7 @@ def train():
         running_acc = 0
 
         for batch_idx, data in enumerate(train_loader):
-            b_queries, b_pr_features, b_ph_features = data
+            b_queries, b_pr_features, b_ph_indices = data
             b_y = torch.tensor([query['gt_ppos_id'] for query in b_queries]).cuda()
 
             batch_size = len(b_queries)
@@ -85,7 +103,7 @@ def train():
             # Foward
             lstm_h0 = grounder.initHidden(batch_size)
             lstm_c0 = grounder.initCell(batch_size)
-            attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
+            attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
 
             topv, topi = attn_weights.topk(1)
             acc = sum(topi.squeeze(1) == b_y).float()/batch_size

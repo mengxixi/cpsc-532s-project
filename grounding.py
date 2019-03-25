@@ -1,12 +1,12 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-
-import numpy as np
+from torch.nn.utils import rnn
 
 
 class GroundeR(nn.Module):
-    def __init__(self, im_feature_size=4096, lm_emb_size=200, hidden_size=50, concat_size=128, output_size=100):
+    def __init__(self, pretrained_embeddings, im_feature_size=4096, lm_emb_size=200, hidden_size=50, concat_size=128, output_size=100):
 
         super().__init__()
 
@@ -16,7 +16,10 @@ class GroundeR(nn.Module):
         self.concat_size = concat_size
         self.output_size = output_size
 
-        self.lstm = nn.LSTM(input_size=lm_emb_size, hidden_size=hidden_size, batch_first=True, dropout=0.5)
+        self.word_embeddings = nn.Embedding(len(pretrained_embeddings), lm_emb_size).from_pretrained(torch.from_numpy(pretrained_embeddings), freeze=False)
+
+        self.dropout = nn.Dropout()
+        self.lstm = nn.LSTM(input_size=lm_emb_size, hidden_size=hidden_size, batch_first=True)
         self.ph_bn = nn.BatchNorm1d(hidden_size)
         self.im_bn = nn.BatchNorm1d(im_feature_size)
 
@@ -27,11 +30,18 @@ class GroundeR(nn.Module):
         self.init_params()
 
     def forward(self, im_input, h0c0, ph_input, batch_size):
-        ph_out, (hn, cn) = self.lstm(ph_input, h0c0)
+        # ph_input is a packed sequence of word indices
+        padded = rnn.pad_packed_sequence(ph_input, batch_first=True, padding_value=0)
+        embedded = self.word_embeddings(padded[0])
+        dropped_emb = self.dropout(embedded)
+        packed_embedded = rnn.pack_padded_sequence(dropped_emb, padded[1], batch_first=True)
+
+        _, (hn, cn) = self.lstm(packed_embedded, h0c0)
         hn = self.ph_bn(hn.permute(1,2,0)) 
         ph_concat = self.ph_proj(hn.permute(0,2,1))
 
-        im_bn = self.im_bn(im_input.permute(0,2,1))
+        dropped_im = self.dropout(im_input)
+        im_bn = self.im_bn(dropped_im.permute(0,2,1))
         im_concat = self.im_proj(im_bn.permute(0,2,1))
 
         out = F.relu((ph_concat + im_concat))

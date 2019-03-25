@@ -12,12 +12,13 @@ from torch.nn.utils.rnn import pack_sequence
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
-    def __init__(self, image_ids, language_model):
+    def __init__(self, image_ids, word2idx=None):
         super().__init__()
 
         self.queries = []
         self.proposals = {}
         self.img2idx = {}
+        self.word2idx = word2idx if word2idx else {'UNK' : 0}
 
         for im_id in image_ids:
             with open(os.path.join('annotations', im_id+'.pkl'), 'rb') as f:
@@ -27,21 +28,33 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
             query_count = 0
             for i, ppos_id in enumerate(anno['gt_ppos_ids']):
+                # Ignore the queries that don't have a positive proposal
                 if ppos_id != -1:
-                    # Ignore the queries that don't have a positive proposal
-                    self.queries.append({'image_id'   : im_id, 
-                                         'phrase'     : anno['phrases'][i],
-                                         'gt_ppos_id' : ppos_id,
-                                         'gt_ppos_all': anno['gt_ppos_all'][i],
-                                         'gt_boxes'   : anno['gt_boxes'][i]})
+                    query_data = {'image_id'   : im_id, 
+                                  'phrase'     : anno['phrases'][i],
+                                  'gt_ppos_id' : ppos_id,
+                                  'gt_ppos_all': anno['gt_ppos_all'][i],
+                                  'gt_boxes'   : anno['gt_boxes'][i]}
+
+                    for j, w in enumerate(anno['phrases'][i]):
+                        if w not in self.word2idx:
+                            if not word2idx:
+                                # Train loader, building vocabulary
+                                self.word2idx[w] = len(self.word2idx)
+                            else:
+                                # Validation/test loader, word unknown
+                                query_data['phrase'][j] = 'UNK'
+
+                    self.queries.append(query_data)
                     query_count += 1
+
 
             if query_count > 0:
                 self.img2idx[im_id] = {'start' : len(self.queries)-query_count,
                                        'len'   : query_count}
 
         self.image_ids = list(self.img2idx.keys())
-        self.lm = language_model
+        self.idx2word = {idx : word for word, idx in self.word2idx.items()}
 
 
     def __len__(self):
@@ -51,27 +64,27 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
     def __getitem__(self, index):
         query = self.queries[index]
 
-        proposal_features = torch.FloatTensor(self._get_features(query['image_id'])).cuda()
-        phrase_features = torch.FloatTensor([self.lm.get_word_vector(w) for w in query['phrase']]).cuda()
+        proposal_features = torch.FloatTensor(self._get_vis_features(query['image_id'])).cuda()
+        phrase_indices = torch.LongTensor([self.word2idx[w] for w in query['phrase']]).cuda()
         # print(self._get_features.cache_info())
 
-        return query, proposal_features, phrase_features
+        return query, proposal_features, phrase_indices
 
 
     @lru_cache(maxsize=100) 
-    def _get_features(self, im_id):
+    def _get_vis_features(self, im_id):
         features = np.load(os.path.join('features', im_id+'.npy'))
         return features
 
 
     def collate_fn(self, data):
         sorted_data = zip(*sorted(data, key=lambda l:len(l[2]), reverse=True))
-        queries, l_proposal_features, l_phrase_features = sorted_data        
+        queries, l_proposal_features, l_phrase_indices = sorted_data        
 
         l_proposal_features = torch.stack(l_proposal_features, 0)
-        l_phrase_features = pack_sequence(list(l_phrase_features))
+        l_phrase_indices = pack_sequence(list(l_phrase_indices))
 
-        return list(queries), l_proposal_features, l_phrase_features
+        return list(queries), l_proposal_features, l_phrase_indices
 
 
 class QuerySampler(torch.utils.data.Sampler):

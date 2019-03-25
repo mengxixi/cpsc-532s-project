@@ -18,6 +18,8 @@ from grounding import GroundeR
 # TODO: Refactor constants
 IMG_RAW_DIR = '/home/siyi/flickr30k-images'
 FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
+PRETRAINED_EMBEDDINGS = 'tmp/embedding.npy'
+WORD2IDX = 'tmp/word2idx.pkl'
 
 
 def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_samples=5):
@@ -84,8 +86,9 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
 
 if __name__ == "__main__":    
-    grounder = GroundeR().cuda()
-    grounder.load_state_dict(torch.load(os.path.join("models", "grounder.ckpt")))
+    pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
+    with open(WORD2IDX, 'rb') as f:
+        word2idx = pickle.load(f)
 
     with open(os.path.join(FLICKR30K_ENTITIES, 'val.txt')) as f1, open(os.path.join(FLICKR30K_ENTITIES, 'nobbox.txt')) as f2:
         # TODO: Format this line nicely
@@ -93,12 +96,13 @@ if __name__ == "__main__":
         nobbox_ids = f2.read().splitlines()
 
     val_ids = [x for x in val_ids if x not in nobbox_ids]
-    lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
-    val_loader = train.get_dataloader(val_ids, lm)
+    val_loader = train.get_dataloader(val_ids, word2idx=word2idx)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
 
+    grounder = GroundeR(pretrained_embeddings).cuda()
+    grounder.load_state_dict(torch.load(os.path.join("models", "grounder.ckpt")))
     acc, loss = evaluate(grounder, val_loader, writer, n_samples=20, global_step=20)
     print("Accuracy: %.3f, Loss: %.3f" % (acc, loss))
 
