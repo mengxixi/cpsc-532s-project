@@ -106,7 +106,13 @@ def train():
             attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
 
             topv, topi = attn_weights.topk(1)
-            acc = sum(topi.squeeze(1) == b_y).float()/batch_size
+            train_acc = 0.
+            pred = topi.squeeze(1)
+            for i, query in enumerate(b_queries):
+                if pred[i] in query['gt_ppos_all']:
+                    train_acc += 1
+
+            train_acc = train_acc/batch_size
 
             loss = criterion(torch.log(attn_weights), b_y)
 
@@ -116,14 +122,14 @@ def train():
             optimizer.zero_grad()
 
             running_loss += loss 
-            running_acc += acc
+            running_acc += train_acc
             global_step = epoch*len(train_loader)+batch_idx
 
             # Log losses
             print_batches = PRINT_EVERY//BATCH_SIZE
             if batch_idx % print_batches == print_batches-1:
                 writer.add_scalar('loss', loss.item(), global_step)
-                writer.add_scalar('train_acc', acc.item(), global_step)
+                writer.add_scalar('train_acc', train_acc, global_step)
                 logging.info("Epoch %d, query %d, loss: %.3f, acc: %.3f" % (epoch+1, (batch_idx+1)*BATCH_SIZE, running_loss/print_batches, running_acc/print_batches))
                 running_loss = 0
                 running_acc = 0

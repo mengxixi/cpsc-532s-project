@@ -27,8 +27,9 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     # TODO: Compute accuracy
     queries = []
     preds = []
+    corrects = []
 
-    n_correct = 0
+    n_correct = 0.
     criterion = torch.nn.NLLLoss(reduction='sum')
     val_loss = 0
 
@@ -51,7 +52,12 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             # TODO: Log the probabilities as well
 
             pred = topi.squeeze(1)
-            n_correct += sum(pred == y)
+            for i, query in enumerate(b_queries):
+                if pred[i] in query['gt_ppos_all']:
+                    n_correct += 1
+                    corrects.append(1)
+                else:
+                    corrects.append(0)
 
             # print(torch.log(attn_weights[0]))
             # print(y[0])
@@ -62,19 +68,19 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             preds.extend(pred.cpu().numpy())
 
     n_queries = len(validation_loader.dataset)
-    acc = n_correct.float()/n_queries
+    acc = n_correct/n_queries
     val_loss = val_loss/n_queries
 
     # Drawing samples
-    sample_queries, sample_preds = zip(*random.sample(list(zip(queries, preds)), n_samples))
+    sample_queries, sample_preds, sample_corrects = zip(*random.sample(list(zip(queries, preds, corrects)), n_samples))
 
     loader = transforms.ToTensor()
-    for (query, pred) in zip(sample_queries, sample_preds):
+    for (query, pred, correct) in zip(sample_queries, sample_preds, sample_corrects):
         image_id = query['image_id']
         proposal_bboxes = validation_loader.dataset.proposals[image_id]
         filename = os.path.join(IMG_RAW_DIR, image_id+'.jpg')
 
-        image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], ' '.join(query['phrase']))
+        image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], correct, ' '.join(query['phrase']))
 
         # Saving
         if not global_step:
