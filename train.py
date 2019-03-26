@@ -79,7 +79,7 @@ def train():
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
-
+    writer.add_text('config', str(Config.CONFIG_DICT))
 
     # Train loop
     best_acc = 0.0
