@@ -29,7 +29,7 @@ WORD2IDX = 'tmp/word2idx.pkl'
 
 # TODO: Refactor constants later
 BATCH_SIZE = 64
-N_EPOCHS = 20
+N_EPOCHS = 40
 LR = 1e-3
 WEIGHT_DECAY = 5e-4
 
@@ -78,7 +78,7 @@ def train():
     # Model, optimizer, etc.
     grounder = GroundeR(pretrained_embeddings).cuda()
     optimizer = torch.optim.Adam(grounder.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    scheduler = MultiStepLR(optimizer, milestones=[15])
+    scheduler = MultiStepLR(optimizer, milestones=[15, 25])
     criterion = torch.nn.NLLLoss()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
