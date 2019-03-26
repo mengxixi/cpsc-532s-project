@@ -1,7 +1,6 @@
 import os
 import glob
 import shutil
-import logging
 import re
 import pickle
 import uuid
@@ -15,29 +14,20 @@ from tqdm import tqdm
 from PIL import Image
 from nltk import word_tokenize
 
+from config import Config
 import util.flickr30k_entities_utils as flickr30k 
 from util.iou import calc_iou
 
-
-# logging configurations
-LOG_FORMAT = "%(asctime)s %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
+Config.load_config()
 
 
-ANNO_RAW_DIR = '/home/siyi/flickr30k_entities/Annotations/'
-SENT_RAW_DIR = '/home/siyi/flickr30k_entities/Sentences/'
-IMG_RAW_DIR = '/home/siyi/flickr30k-images'
+ANNO_RAW_DIR = Config.get('dirs.entities.anno')
+SENT_RAW_DIR = Config.get('dirs.entities.sent')
+IMG_RAW_DIR = Config.get('dirs.images.root')
 
+CROP_SIZE = Config.get('crop_size')
 
-FEAT_DIR = 'features'
-ANNO_DIR = 'annotations'
-
-CROP_SIZE = 224
-FEATURE_SIZE = 4096 # TODO: get rid of this when graph R-CNN ready
-IOU_THRESHOLD = 0.5
-
-
-with open('/home/siyi/flickr30k_entities/all.txt') as f:
+with open(os.path.join(Config.get('dirs.entities.root'), Config.get('ids.all'))) as f:
     ALL_IDS = f.readlines()
 ALL_IDS = [x.strip() for x in ALL_IDS]
 
@@ -60,7 +50,7 @@ def generate_features(im_file, boxes, model):
     batch_size =32
     crops = [load_crop(im_file, box) for box in boxes]
 
-    features = np.empty([len(crops), FEATURE_SIZE])
+    features = np.empty([len(crops), Config.get('im_feat_size')])
 
     for i in range(0, len(crops), batch_size):
         batch = crops[i:i+batch_size]
@@ -78,7 +68,7 @@ def preprocess_flickr30k_entities(get_features=True):
     proposal_ub = 0
     n_queries = 0
     for fid in tqdm(ALL_IDS):
-        file = os.path.join(IMG_RAW_DIR, 'proposals', fid+'.pkl')
+        file = os.path.join(IMG_RAW_DIR, Config.get('dirs.images.proposals'), fid+'.pkl')
         if not os.path.exists(file):
             continue
 
@@ -125,7 +115,7 @@ def preprocess_flickr30k_entities(get_features=True):
                     ## TODO: instead of comparing with the union of the gt, i'm just checking if it overlaps with any of the gt boxes for now, may have to change to match with literature..
                     for gt in boxes[phrase_id]:
                         iou = calc_iou(proposal, gt)
-                        if iou > IOU_THRESHOLD:
+                        if iou > Config.get('iou_threshold'):
                             pos_proposals.add(i)
                             if iou > best_iou:
                                 best_iou = iou
@@ -138,7 +128,7 @@ def preprocess_flickr30k_entities(get_features=True):
                     proposal_ub += 1
 
         if len(phrases) > 0:
-            with open(os.path.join(ANNO_DIR, fid+'.pkl'), 'wb') as f:
+            with open(os.path.join(Config.get('dirs.annotations'), fid+'.pkl'), 'wb') as f:
                 fdata = {'phrases'      : phrases, 
                          'gt_boxes'     : gt_boxes,
                          'proposals'    : proposal_boxes,
@@ -149,18 +139,17 @@ def preprocess_flickr30k_entities(get_features=True):
 
             if get_features:
                 features = generate_features(os.path.join(IMG_RAW_DIR, fid+'.jpg'), proposal_boxes, vgg_model)
-                np.save(os.path.join(FEAT_DIR, fid+'.npy'), features)
+                np.save(os.path.join(Config.get('dirs.features'), fid+'.npy'), features)
 
         else:
-            logging.info("No boxes annotated for %s.jpg" % fid)
+            print("No boxes annotated for %s.jpg" % fid)
 
         # TODO: only keep proposals that has a significant overlap with one of the GT boxes??
         # TODO: union the gt boxes for each phrase (if more than one gt box?)
-        # TODO: Compute proposal upper bound when proposal generator is better
         # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
 
-    logging.info("Number of queries: %d" % n_queries)
-    logging.info("Proposal upper-bound: %.3f" % (proposal_ub/n_queries))
+    print("Number of queries: %d" % n_queries)
+    print("Proposal upper-bound: %.3f" % (proposal_ub/n_queries))
 
 
 if __name__ == "__main__":

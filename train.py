@@ -16,25 +16,22 @@ import evaluate
 from dataloader import Flickr30K_Entities, QuerySampler
 from language_model import GloVe
 from grounding import GroundeR
+from config import Config
 
+Config.load_config()
 
 # logging configurations
 LOG_FORMAT = "%(asctime)s %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 
 # directories
-FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
-PRETRAINED_EMBEDDINGS = 'tmp/embedding.npy'
-WORD2IDX = 'tmp/word2idx.pkl'
+FLICKR30K_ENTITIES = Config.get('dirs.entities.root')
+PRETRAINED_EMBEDDINGS = Config.get('dirs.tmp.pretrained_embeddings')
+WORD2IDX = Config.get('dirs.tmp.word2idx')
 
-# TODO: Refactor constants later
-BATCH_SIZE = 64
-N_EPOCHS = 40
-LR = 1e-3
-WEIGHT_DECAY = 5e-4
-
-PRINT_EVERY = 100 # Every x iterations
-EVALUATE_EVERY = 10000
+BATCH_SIZE = Config.get('batch_size')
+PRINT_EVERY = Config.get('print_every') # Every x iterations
+EVALUATE_EVERY = Config.get('evaluate_every')
 
 
 def get_dataloader(im_ids, word2idx=None):
@@ -50,8 +47,7 @@ def get_dataloader(im_ids, word2idx=None):
 def train():
 
     # Load datasets
-    with open(os.path.join(FLICKR30K_ENTITIES, 'train.txt')) as f1, open(os.path.join(FLICKR30K_ENTITIES, 'val.txt')) as f2, open(os.path.join(FLICKR30K_ENTITIES, 'nobbox.txt')) as f3:
-        # TODO: Format this line nicely
+    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.train'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.val'))) as f2,  open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f3:
         train_ids = f1.read().splitlines()
         val_ids = f2.read().splitlines()
         nobbox_ids = f3.read().splitlines()
@@ -70,15 +66,15 @@ def train():
     if os.path.exists(PRETRAINED_EMBEDDINGS):
         pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
     else:
-        lm = GloVe(os.path.join('models', 'glove', 'glove.twitter.27B.200d.txt'), dim=200)
+        lm = GloVe(Config.get('language_model'), dim=Config.get('word_emb_size'))
         pretrained_embeddings = np.array([lm.get_word_vector(w) for w in word2idx.keys()])
         np.save(PRETRAINED_EMBEDDINGS, pretrained_embeddings)
 
 
     # Model, optimizer, etc.
     grounder = GroundeR(pretrained_embeddings).cuda()
-    optimizer = torch.optim.Adam(grounder.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    scheduler = MultiStepLR(optimizer, milestones=[15, 25])
+    optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
+    scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
     criterion = torch.nn.NLLLoss()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
@@ -87,7 +83,7 @@ def train():
 
     # Train loop
     best_acc = 0.0
-    for epoch in tqdm(range(N_EPOCHS), file=sys.stdout):
+    for epoch in tqdm(range(Config.get('n_epochs')), file=sys.stdout):
         writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
         scheduler.step()
 
@@ -144,7 +140,7 @@ def train():
 
                 # Improved on validation set
                 if acc > best_acc:
-                    torch.save(grounder.state_dict(), os.path.join('models', 'grounder.ckpt'))
+                    torch.save(grounder.state_dict(), Config.get('checkpoint'))
                     best_acc = acc
 
                 grounder.train()

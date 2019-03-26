@@ -1,6 +1,7 @@
 import os
 import glob
 import random
+import pickle
 from datetime import datetime
 
 import numpy as np
@@ -12,19 +13,18 @@ import train
 import util.misc as misc
 from language_model import GloVe
 from grounding import GroundeR
+from config import Config
 
 
+Config.load_config()
 
-# TODO: Refactor constants
-IMG_RAW_DIR = '/home/siyi/flickr30k-images'
-FLICKR30K_ENTITIES = '/home/siyi/flickr30k_entities'
-PRETRAINED_EMBEDDINGS = 'tmp/embedding.npy'
-WORD2IDX = 'tmp/word2idx.pkl'
+FLICKR30K_ENTITIES = Config.get('dirs.entities.root')
+PRETRAINED_EMBEDDINGS = Config.get('dirs.tmp.pretrained_embeddings')
+WORD2IDX = Config.get('dirs.tmp.word2idx')
 
 
 def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_samples=5):
     model.eval()
-    # TODO: Compute accuracy
     queries = []
     preds = []
     corrects = []
@@ -49,7 +49,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
             # Get topk
             topv, topi = attn_weights.topk(1)
-            # TODO: Log the probabilities as well
+            # TODO: Log the probabilities as well?
 
             pred = topi.squeeze(1)
             for i, query in enumerate(b_queries):
@@ -78,13 +78,13 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     for (query, pred, correct) in zip(sample_queries, sample_preds, sample_corrects):
         image_id = query['image_id']
         proposal_bboxes = validation_loader.dataset.proposals[image_id]
-        filename = os.path.join(IMG_RAW_DIR, image_id+'.jpg')
+        filename = os.path.join(Config.get('dirs.images.root'), image_id+'.jpg')
 
         image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], correct, ' '.join(query['phrase']))
 
         # Saving
         if not global_step:
-            image.save(os.path.join('tmp', '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
+            image.save(os.path.join(Config.get('dirs.tmp'), '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
         else:
             summary_writer.add_image('validation', loader(image), global_step)
 
@@ -96,8 +96,7 @@ if __name__ == "__main__":
     with open(WORD2IDX, 'rb') as f:
         word2idx = pickle.load(f)
 
-    with open(os.path.join(FLICKR30K_ENTITIES, 'val.txt')) as f1, open(os.path.join(FLICKR30K_ENTITIES, 'nobbox.txt')) as f2:
-        # TODO: Format this line nicely
+    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.val'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f2:
         val_ids = f1.read().splitlines()
         nobbox_ids = f2.read().splitlines()
 
@@ -108,7 +107,7 @@ if __name__ == "__main__":
     writer = SummaryWriter(os.path.join('logs', subdir))
 
     grounder = GroundeR(pretrained_embeddings).cuda()
-    grounder.load_state_dict(torch.load(os.path.join("models", "grounder.ckpt")))
+    grounder.load_state_dict(torch.load(Config.get('checkpoint')))
     acc, loss = evaluate(grounder, val_loader, writer, n_samples=20, global_step=20)
     print("Accuracy: %.3f, Loss: %.3f" % (acc, loss))
 

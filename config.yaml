@@ -1,0 +1,48 @@
+# model config
+hidden_size: 50
+concat_size: 128
+n_proposals: 100
+im_feat_size: 4096
+word_emb_size: 200
+language_model: models/glove/glove.twitter.27B.200d.txt
+checkpoint: models/grounder.ckpt
+
+# training parameters
+batch_size: 64
+n_epochs: 40
+learning_rate: 0.001
+sched_steps: [15, 25]
+weight_decay: 0.0005
+print_every: 100
+evaluate_every: 10000
+
+# misc
+iou_threshold: 0.5
+crop_size: 224
+
+ids:
+  all: all.txt
+  train: train.txt
+  val: val.txt
+  test: test.txt
+  nobbox: nobbox.txt
+
+dirs:
+  entities:
+    root: /home/siyi/flickr30k_entities
+    anno: /home/siyi/flickr30k_entities/Annotations
+    sent: /home/siyi/flickr30k_entities/Sentences
+
+  images:
+    root: /home/siyi/flickr30k-images
+    proposals: proposals
+
+  features: features
+  annotations: annotations
+
+  tmp:
+    root: tmp
+    word2idx: tmp/word2idx.pkl
+    pretrained_embeddings: tmp/embedding.npy
+
+
