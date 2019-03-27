@@ -163,5 +163,5 @@ Backup[ ]of[ ]*.numbers/
 features
 models
 logs
-annotations
+annotations*
 tmp

@@ -30,7 +30,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     corrects = []
 
     n_correct = 0.
-    criterion = torch.nn.NLLLoss(reduction='sum', ignore_index=-1)
+    criterion = torch.nn.NLLLoss(reduction='sum', ignore_index=Config.get('n_proposals'))
     val_loss = 0
 
     for batch_idx, data in enumerate(validation_loader):
@@ -80,6 +80,9 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
         proposal_bboxes = validation_loader.dataset.proposals[image_id]
         filename = os.path.join(Config.get('dirs.images.root'), image_id+'.jpg')
 
+        if query['gt_ppos_id'] == len(proposal_bboxes):
+            continue
+            
         image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], correct, ' '.join(query['phrase']))
 
         # Saving

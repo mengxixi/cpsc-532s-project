@@ -116,7 +116,7 @@ def preprocess_flickr30k_entities(get_features=True):
                 gt_boxes.append(boxes[phrase_id])
 
                 pos_proposals = set()
-                gt_ppos_id = -1
+                gt_ppos_id = None
                 best_iou = 0.0
                 for i, proposal in enumerate(proposal_boxes):
                     for gt in boxes[phrase_id]:
@@ -130,7 +130,7 @@ def preprocess_flickr30k_entities(get_features=True):
                 gt_ppos_ids.append(gt_ppos_id)
 
                 n_queries += 1
-                if gt_ppos_id != -1:
+                if gt_ppos_id != None:
                     proposal_ub += 1
 
         if len(phrases) > 0:

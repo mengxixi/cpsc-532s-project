@@ -75,7 +75,7 @@ def train():
     grounder = GroundeR(pretrained_embeddings).cuda()
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
-    criterion = torch.nn.NLLLoss()
+    criterion = torch.nn.NLLLoss(ignore_index=Config.get('n_proposals'))
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))

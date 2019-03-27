@@ -28,25 +28,24 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
             query_count = 0
             for i, ppos_id in enumerate(anno['gt_ppos_ids']):
-                # Ignore the queries that don't have a positive proposal
-                if not ignore_noppos or ppos_id != -1:
-                    query_data = {'image_id'   : im_id, 
-                                  'phrase'     : anno['phrases'][i],
-                                  'gt_ppos_id' : ppos_id,
-                                  'gt_ppos_all': anno['gt_ppos_all'][i],
-                                  'gt_boxes'   : anno['gt_boxes'][i]}
+                ppos_id = ppos_id if ppos_id else len(self.proposals[im_id])
+                query_data = {'image_id'   : im_id, 
+                              'phrase'     : anno['phrases'][i],
+                              'gt_ppos_id' : ppos_id,
+                              'gt_ppos_all': anno['gt_ppos_all'][i],
+                              'gt_boxes'   : anno['gt_boxes'][i]}
 
-                    for j, w in enumerate(anno['phrases'][i]):
-                        if w not in self.word2idx:
-                            if not word2idx:
-                                # Train loader, building vocabulary
-                                self.word2idx[w] = len(self.word2idx)
-                            else:
-                                # Validation/test loader, word unknown
-                                query_data['phrase'][j] = 'UNK'
+                for j, w in enumerate(anno['phrases'][i]):
+                    if w not in self.word2idx:
+                        if not word2idx:
+                            # Train loader, building vocabulary
+                            self.word2idx[w] = len(self.word2idx)
+                        else:
+                            # Validation/test loader, word unknown
+                            query_data['phrase'][j] = 'UNK'
 
-                    self.queries.append(query_data)
-                    query_count += 1
+                self.queries.append(query_data)
+                query_count += 1
 
             if query_count > 0:
                 self.img2idx[im_id] = {'start' : len(self.queries)-query_count,
