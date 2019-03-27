@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pack_sequence
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
-    def __init__(self, image_ids, ignore_noppos=True, word2idx=None):
+    def __init__(self, image_ids, word2idx=None):
         super().__init__()
 
         self.queries = []

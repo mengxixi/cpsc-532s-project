@@ -34,8 +34,8 @@ PRINT_EVERY = Config.get('print_every') # Every x iterations
 EVALUATE_EVERY = Config.get('evaluate_every')
 
 
-def get_dataloader(im_ids, ignore_noppos=True, word2idx=None):
-    dataset = Flickr30K_Entities(im_ids, ignore_noppos=ignore_noppos, word2idx=word2idx)
+def get_dataloader(im_ids, word2idx=None):
+    dataset = Flickr30K_Entities(im_ids, word2idx=word2idx)
     loader = torch.utils.data.DataLoader(
         dataset, 
         batch_size = BATCH_SIZE, 
@@ -59,7 +59,7 @@ def train():
     word2idx = train_loader.dataset.word2idx
     with open(WORD2IDX, 'wb') as f:
         pickle.dump(word2idx, f)
-    val_loader = get_dataloader(val_ids, ignore_noppos=False, word2idx=word2idx)
+    val_loader = get_dataloader(val_ids, word2idx=word2idx)
 
 
     # Load pretrained embeddings

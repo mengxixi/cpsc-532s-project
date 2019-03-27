@@ -104,7 +104,7 @@ if __name__ == "__main__":
         nobbox_ids = f2.read().splitlines()
 
     val_ids = [x for x in val_ids if x not in nobbox_ids]
-    val_loader = train.get_dataloader(val_ids, ignore_noppos=False, word2idx=word2idx)
+    val_loader = train.get_dataloader(val_ids, word2idx=word2idx)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
