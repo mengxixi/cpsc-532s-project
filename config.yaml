@@ -38,7 +38,7 @@ dirs:
     proposals: proposals
 
   features: features
-  annotations: annotations
+  annotations: annotations_v2
 
   tmp:
     root: tmp
