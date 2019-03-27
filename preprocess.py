@@ -16,7 +16,7 @@ from nltk import word_tokenize
 
 from config import Config
 import util.flickr30k_entities_utils as flickr30k 
-from util.iou import calc_iou, rec_convex_hull_union
+from util.iou import calc_iou, calc_iou_multiple
 
 Config.load_config()
 
@@ -26,6 +26,7 @@ SENT_RAW_DIR = Config.get('dirs.entities.sent')
 IMG_RAW_DIR = Config.get('dirs.images.root')
 
 CROP_SIZE = Config.get('crop_size')
+IOU_THRESHOLD = Config.get('iou_threshold')
 
 with open(os.path.join(Config.get('dirs.entities.root'), Config.get('ids.all'))) as f:
     ALL_IDS = f.readlines()
@@ -106,31 +107,38 @@ def preprocess_flickr30k_entities(get_features=True):
 
                 clean_phrase = re.sub(u"(\u2018|\u2019)", "'", phrase['phrase'])
                 phrases.append(word_tokenize(clean_phrase))
-
-                # Union all the gt boxes with its rectangular convex hull
-                # Later we can get rid of this for finer-grained
-                # multi-instance grounding
-                union = rec_convex_hull_union(boxes[phrase_id])
-                boxes[phrase_id] = [union]
-
                 gt_boxes.append(boxes[phrase_id])
 
                 pos_proposals = set()
-                gt_ppos_id = None
-                best_iou = 0.0
-                for i, proposal in enumerate(proposal_boxes):
-                    for gt in boxes[phrase_id]:
+
+                good_ids = set()
+                for gt in boxes[phrase_id]:
+                    # Greedy way of finding the best set of proposals to be
+                    # used as target labels for training
+                    best_match = -1
+                    best_iou = 0.0
+                    for i, proposal in enumerate(proposal_boxes):
+                        if i in good_ids:
+                            # Already matched with another gt box
+                            continue
                         iou = calc_iou(proposal, gt)
-                        if iou > Config.get('iou_threshold'):
+                        if iou > IOU_THRESHOLD:
                             pos_proposals.add(i)
                             if iou > best_iou:
-                                best_iou = iou
-                                gt_ppos_id = i
+                                best_iou = iou 
+                                best_match = i
+
+                    if best_match != -1:
+                        # Found the best matching proposal for this gt box
+                        good_ids.add(best_match)
+
                 gt_ppos_all.append(list(pos_proposals))
-                gt_ppos_ids.append(gt_ppos_id)
+                gt_ppos_ids.append(list(good_ids))
 
                 n_queries += 1
-                if gt_ppos_id != None:
+
+                iou_multiple = calc_iou_multiple(boxes[phrase_id], [proposal_boxes[i] for i in good_ids])
+                if iou_multiple > IOU_THRESHOLD:
                     proposal_ub += 1
 
         if len(phrases) > 0:
@@ -149,10 +157,6 @@ def preprocess_flickr30k_entities(get_features=True):
 
         else:
             print("No boxes annotated for %s.jpg" % fid)
-
-        # TODO: only keep proposals that has a significant overlap with one of the GT boxes??
-        # TODO: union the gt boxes for each phrase (if more than one gt box?)
-        # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
 
     print("Number of queries: %d" % n_queries)
     print("Proposal upper-bound: %.3f" % (proposal_ub/n_queries))
