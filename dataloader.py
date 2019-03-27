@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pack_sequence
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
-    def __init__(self, image_ids, word2idx=None):
+    def __init__(self, image_ids, ignore_noppos=True, word2idx=None):
         super().__init__()
 
         self.queries = []
@@ -29,7 +29,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
             query_count = 0
             for i, ppos_id in enumerate(anno['gt_ppos_ids']):
                 # Ignore the queries that don't have a positive proposal
-                if ppos_id != -1:
+                if not ignore_noppos or ppos_id != -1:
                     query_data = {'image_id'   : im_id, 
                                   'phrase'     : anno['phrases'][i],
                                   'gt_ppos_id' : ppos_id,
@@ -47,7 +47,6 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
                     self.queries.append(query_data)
                     query_count += 1
-
 
             if query_count > 0:
                 self.img2idx[im_id] = {'start' : len(self.queries)-query_count,

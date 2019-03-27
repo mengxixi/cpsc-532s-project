@@ -30,7 +30,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     corrects = []
 
     n_correct = 0.
-    criterion = torch.nn.NLLLoss(reduction='sum')
+    criterion = torch.nn.NLLLoss(reduction='sum', ignore_index=-1)
     val_loss = 0
 
     for batch_idx, data in enumerate(validation_loader):
@@ -101,7 +101,7 @@ if __name__ == "__main__":
         nobbox_ids = f2.read().splitlines()
 
     val_ids = [x for x in val_ids if x not in nobbox_ids]
-    val_loader = train.get_dataloader(val_ids, word2idx=word2idx)
+    val_loader = train.get_dataloader(val_ids, ignore_noppos=False, word2idx=word2idx)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
