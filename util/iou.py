@@ -37,8 +37,8 @@ def calc_iou(box1, box2):
 
 def calc_iou_multiple(boxes1, boxes2):
     # TODO: DOC
-    poly1 = poly_union(exact_group_union(boxes1))
-    poly2 = poly_union(exact_group_union(boxes2))
+    poly1 = poly_union(boxes1)
+    poly2 = poly_union(boxes2)
 
     inter = poly1.intersection(poly2).area
     union = poly1.union(poly2).area
@@ -49,13 +49,12 @@ def calc_iou_multiple(boxes1, boxes2):
     return iou
 
 
-def poly_union(groups):
+def poly_union(boxes):
     # TODO: DOC
     res_poly = geometry.Polygon()
-    for g in groups:
-        for box in g:
-            rec = geometry.box(box[0], box[1], box[2], box[3])
-            res_poly = res_poly.union(rec)
+    for box in boxes:
+        rec = geometry.box(box[0], box[1], box[2], box[3])
+        res_poly = res_poly.union(rec)
     return res_poly
 
 
