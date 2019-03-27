@@ -1,4 +1,7 @@
 import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
+from shapely import geometry
 
 
 def calc_iou(box1, box2):
@@ -32,7 +35,65 @@ def calc_iou(box1, box2):
     return iou
 
 
+def calc_iou_multiple(boxes1, boxes2):
+    # TODO: DOC
+    poly1 = poly_union(exact_group_union(boxes1))
+    poly2 = poly_union(exact_group_union(boxes2))
+
+    inter = poly1.intersection(poly2).area
+    union = poly1.union(poly2).area
+
+    iou = float(inter) / float(union)
+    if iou < 0:
+        iou = 0.0
+    return iou
+
+
+def poly_union(groups):
+    # TODO: DOC
+    res_poly = geometry.Polygon()
+    for g in groups:
+        for box in g:
+            rec = geometry.box(box[0], box[1], box[2], box[3])
+            res_poly = res_poly.union(rec)
+    return res_poly
+
+
+def exact_group_union(boxes):
+    """
+    Args:
+        boxes: list of [xmin, ymin, xmax, ymax]
+
+        p1 *-----
+           |     |
+           |_____* p2
+    Returns: list of non-overlapping groups where each group is a list of boxes, within each group, boxes have a non-zero overlap with each other
+        
+    """
+
+    n = len(boxes)
+
+    # Construct adjacency matrix based on overlap
+    overlaps = np.zeros((n,n), dtype=int)
+    for i in range(n):
+        for j in range(i+1, n):
+            if calc_iou(boxes[i], boxes[j]) > 0.0:
+                overlaps[i,j] = 1
+
+    # Find disjoint sets
+    graph = csr_matrix(overlaps)
+    n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
+
+    groups = []
+    for i in range(n_components):
+        group = [boxes[j] for j in range(n) if labels[j]==i]
+        groups.append(group)
+
+    return groups
+
+
 def rec_convex_hull_union(boxes):
+    # TODO: DOC
     x = np.array(boxes)
     mins = x[:,:2].min(axis=0)
     maxs = x[:,2:4].max(axis=0)
