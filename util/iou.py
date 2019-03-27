@@ -1,5 +1,5 @@
 import numpy as np
-import os, sys
+
 
 def calc_iou(box1, box2):
     # box: [xmin, ymin, xmax, ymax]
@@ -30,3 +30,12 @@ def calc_iou(box1, box2):
     if iou < 0:
         iou = 0.0
     return iou
+
+
+def rec_convex_hull_union(boxes):
+    x = np.array(boxes)
+    mins = x[:,:2].min(axis=0)
+    maxs = x[:,2:4].max(axis=0)
+    union = np.concatenate((mins, maxs), axis=0)
+    return list(union)
+

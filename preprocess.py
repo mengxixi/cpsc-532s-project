@@ -16,7 +16,7 @@ from nltk import word_tokenize
 
 from config import Config
 import util.flickr30k_entities_utils as flickr30k 
-from util.iou import calc_iou
+from util.iou import calc_iou, rec_convex_hull_union
 
 Config.load_config()
 
@@ -106,13 +106,19 @@ def preprocess_flickr30k_entities(get_features=True):
 
                 clean_phrase = re.sub(u"(\u2018|\u2019)", "'", phrase['phrase'])
                 phrases.append(word_tokenize(clean_phrase))
+
+                # Union all the gt boxes with its rectangular convex hull
+                # Later we can get rid of this for finer-grained
+                # multi-instance grounding
+                union = rec_convex_hull_union(boxes[phrase_id])
+                boxes[phrase_id] = [union]
+
                 gt_boxes.append(boxes[phrase_id])
 
                 pos_proposals = set()
                 gt_ppos_id = -1
                 best_iou = 0.0
                 for i, proposal in enumerate(proposal_boxes):
-                    ## TODO: instead of comparing with the union of the gt, i'm just checking if it overlaps with any of the gt boxes for now, may have to change to match with literature..
                     for gt in boxes[phrase_id]:
                         iou = calc_iou(proposal, gt)
                         if iou > Config.get('iou_threshold'):
