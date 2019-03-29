@@ -61,25 +61,24 @@ def train():
         pickle.dump(word2idx, f)
     val_loader = get_dataloader(val_ids, word2idx=word2idx)
 
-
     # Load pretrained embeddings
     word_embedding_size = Config.get('word_emb_size')
     if os.path.exists(PRETRAINED_EMBEDDINGS):
         pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
     else:
-        lm = GloVe(Config.get('language_model'), dim=word_embedding_size)
-        pretrained_embeddings = np.array([lm.get_word_vector(w) for w in word2idx.keys()])
-        np.save(PRETRAINED_EMBEDDINGS, pretrained_embeddings)
-
+        # lm = GloVe(Config.get('language_model'), dim=word_embedding_size)
+        # pretrained_embeddings = np.array([lm.get_word_vector(w) for w in word2idx.keys()])
+        pretrained_embeddings = np.eye(word_embedding_size, dtype='float32')
+        # np.save(PRETRAINED_EMBEDDINGS, pretrained_embeddings)
 
     # Model, optimizer, etc.
     hidden_size = Config.get('hidden_size')
-    concat_size = Config.get('concat_size')
+    proj_size = Config.get('proj_size')
     n_proposals = Config.get('n_proposals')
     im_feat_size = Config.get('im_feat_size')
 
-    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=output_size).cuda()
-    
+    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, proj_size=proj_size, output_size=n_proposals).cuda()
+
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
     criterion = torch.nn.NLLLoss(ignore_index=n_proposals)

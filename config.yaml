@@ -1,9 +1,9 @@
 # model config
 hidden_size: 50
-concat_size: 128
+proj_size: 128
 n_proposals: 100
 im_feat_size: 4096
-word_emb_size: 200
+word_emb_size: 12784
 language_model: models/glove/glove.twitter.27B.200d.txt
 checkpoint: models/grounder.ckpt
 
