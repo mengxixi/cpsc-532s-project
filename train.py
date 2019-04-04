@@ -8,6 +8,7 @@ from datetime import datetime
 import numpy as np
 import torch
 import torch.utils.data
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -108,8 +109,9 @@ def train():
             # Foward
             lstm_h0 = grounder.initHidden(batch_size)
             lstm_c0 = grounder.initCell(batch_size)
-            attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
+            raw_attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
 
+            attn_weights = F.softmax(raw_attn_weights, dim=1)
             sorted_idx = torch.argsort(attn_weights, dim=1, descending=True)
             sorted_weights = torch.gather(attn_weights, 1, sorted_idx)
 
@@ -134,7 +136,7 @@ def train():
 
             train_acc = train_acc/batch_size
 
-            loss = criterion(torch.log(attn_weights), b_y)
+            loss = criterion(raw_attn_weights, b_y)
 
             # Backward and update
             loss.backward()

@@ -6,6 +6,7 @@ from datetime import datetime
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 from torchvision import transforms
 
@@ -44,11 +45,12 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             # Forward
             lstm_h0 = model.initHidden(batch_size)
             lstm_c0 = model.initCell(batch_size)
-            attn_weights = model(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
+            raw_attn_weights = model(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
 
-            val_loss += criterion(torch.log(attn_weights), b_y)
+            val_loss += criterion(raw_attn_weights, b_y)
 
             # Get topk
+            attn_weights = F.softmax(raw_attn_weights, dim=1)
             sorted_idx = torch.argsort(attn_weights, dim=1, descending=True)
             sorted_weights = torch.gather(attn_weights, 1, sorted_idx)
 

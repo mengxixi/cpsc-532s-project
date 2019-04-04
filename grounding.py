@@ -47,9 +47,8 @@ class GroundeR(nn.Module):
         out = F.relu((ph_concat + im_concat))
 
         attn_weights_raw = self.attn(out).squeeze(2) # [bs, 100, 1]
-        attn_weights = F.softmax(attn_weights_raw, dim=1)
 
-        return attn_weights
+        return attn_weights_raw
 
 
     def initHidden(self, batch_size):
