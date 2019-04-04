@@ -56,6 +56,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
             # TODO: Log the probabilities as well?
 
+            batch_pred = []
             for i, query in enumerate(b_queries):
                 im_id = b_queries[i]['image_id']
                 all_proposals = np.array(validation_loader.dataset.proposals[im_id])
@@ -73,6 +74,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
                     corrects.append(1)
                 else:
                     corrects.append(0)
+                batch_pred.append(boxes_pred)
 
             # TODO: Remove debug prints
             # print(torch.log(attn_weights[0]))
@@ -81,7 +83,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
             # Save predictions for drawing
             queries.extend(b_queries)
-            preds.append(list(boxes_pred))
+            preds.extend(batch_pred)
 
     n_queries = len(validation_loader.dataset)
     acc = n_correct/n_queries
