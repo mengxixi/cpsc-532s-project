@@ -110,7 +110,10 @@ def preprocess_flickr30k_entities(get_features=True):
                 gt_boxes.append(boxes[phrase_id])
 
                 pos_proposals = set()
+<<<<<<< HEAD
 
+=======
+>>>>>>> bbcae973649f1723232d5a253e41d03168be3dcc
                 good_ids = set()
                 for gt in boxes[phrase_id]:
                     # Greedy way of finding the best set of proposals to be
@@ -136,7 +139,10 @@ def preprocess_flickr30k_entities(get_features=True):
                 gt_ppos_ids.append(list(good_ids))
 
                 n_queries += 1
+<<<<<<< HEAD
 
+=======
+>>>>>>> bbcae973649f1723232d5a253e41d03168be3dcc
                 iou_multiple = calc_iou_multiple(boxes[phrase_id], [proposal_boxes[i] for i in good_ids])
                 if iou_multiple > IOU_THRESHOLD:
                     proposal_ub += 1
