@@ -9,6 +9,7 @@ def nms(boxes, overlapThresh=0.5):
     if len(boxes) == 0:
         return []
  
+    boxes = np.array(boxes)
     # if the bounding boxes integers, convert them to floats --
     # this is important since we'll be doing a bunch of divisions
     if boxes.dtype.kind == "i":

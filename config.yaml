@@ -17,6 +17,7 @@ print_every: 100
 evaluate_every: 10000
 
 # misc
+cumsum_cutoff: 0.95
 iou_threshold: 0.5
 crop_size: 224
 

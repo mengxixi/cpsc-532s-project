@@ -10,6 +10,8 @@ import torch
 import torch.utils.data
 from torch.nn.utils.rnn import pack_sequence
 
+from config import Config
+
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
     def __init__(self, image_ids, word2idx=None):
@@ -21,19 +23,24 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         self.word2idx = word2idx if word2idx else {'UNK' : 0}
 
         for im_id in image_ids:
-            with open(os.path.join('annotations', im_id+'.pkl'), 'rb') as f:
+            with open(os.path.join(Config.get('dirs.annotations'), im_id+'.pkl'), 'rb') as f:
                 anno = pickle.load(f)
 
             self.proposals[im_id] = anno['proposals']
 
             query_count = 0
-            for i, ppos_id in enumerate(anno['gt_ppos_ids']):
-                ppos_id = ppos_id if ppos_id else len(self.proposals[im_id])
-                query_data = {'image_id'   : im_id, 
-                              'phrase'     : anno['phrases'][i],
-                              'gt_ppos_id' : ppos_id,
-                              'gt_ppos_all': anno['gt_ppos_all'][i],
-                              'gt_boxes'   : anno['gt_boxes'][i]}
+
+            for i, ppos_ids in enumerate(anno['gt_ppos_ids']):
+                if len(ppos_ids) == 0:
+                    # TODO: Skipping these is fine? Since these won't propagate any gradients anyway
+                    continue
+
+                query_data = {'image_id'    : im_id, 
+                              'phrase'      : anno['phrases'][i],
+                              'gt_ppos_ids' : ppos_ids,
+                              'gt_ppos_all' : anno['gt_ppos_all'][i],
+                              'gt_boxes'    : anno['gt_boxes'][i]}
+
 
                 for j, w in enumerate(anno['phrases'][i]):
                     if w not in self.word2idx:
@@ -64,9 +71,13 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
         proposal_features = torch.FloatTensor(self._get_vis_features(query['image_id'])).cuda()
         phrase_indices = torch.LongTensor([self.word2idx[w] for w in query['phrase']]).cuda()
-        # print(self._get_features.cache_info())
 
-        return query, proposal_features, phrase_indices
+        target = torch.zeros(len(proposal_features)).cuda()
+        idx = torch.LongTensor(query['gt_ppos_ids'])
+        target[idx] = 1
+
+        # print(self._get_features.cache_info())
+        return query, proposal_features, phrase_indices, target
 
 
     @lru_cache(maxsize=100) 
@@ -77,12 +88,13 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
     def collate_fn(self, data):
         sorted_data = zip(*sorted(data, key=lambda l:len(l[2]), reverse=True))
-        queries, l_proposal_features, l_phrase_indices = sorted_data        
+        queries, l_proposal_features, l_phrase_indices, l_targets = sorted_data
 
         l_proposal_features = torch.stack(l_proposal_features, 0)
         l_phrase_indices = pack_sequence(list(l_phrase_indices))
+        l_targets = torch.stack(l_targets, 0)
 
-        return list(queries), l_proposal_features, l_phrase_indices
+        return list(queries), l_proposal_features, l_phrase_indices, l_targets
 
 
 class QuerySampler(torch.utils.data.Sampler):

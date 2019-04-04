@@ -14,6 +14,8 @@ import util.misc as misc
 from language_model import GloVe
 from grounding import GroundeR
 from config import Config
+from util.iou import calc_iou_multiple, exact_group_union
+from util.nms import nms
 
 
 Config.load_config()
@@ -30,11 +32,11 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     corrects = []
 
     n_correct = 0.
-    criterion = torch.nn.NLLLoss(reduction='sum', ignore_index=Config.get('n_proposals'))
+    criterion = torch.nn.MultiLabelSoftMarginLoss()
     val_loss = 0
 
     for batch_idx, data in enumerate(validation_loader):
-        b_queries, b_pr_features, b_ph_features = data
+        b_queries, b_pr_features, b_ph_features, b_y = data
 
         batch_size = len(b_queries)
 
@@ -44,28 +46,42 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             lstm_c0 = model.initCell(batch_size)
             attn_weights = model(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
 
-            y =  torch.tensor([query['gt_ppos_id'] for query in b_queries]).cuda()
-            val_loss += criterion(torch.log(attn_weights), y)
+            val_loss += criterion(torch.log(attn_weights), b_y)
 
             # Get topk
-            topv, topi = attn_weights.topk(1)
+            sorted_idx = torch.argsort(attn_weights, dim=1, descending=True)
+            sorted_weights = torch.gather(attn_weights, 1, sorted_idx)
+
+            topks = (sorted_weights.cumsum(dim=1) > Config.get('cumsum_cutoff')).sum(dim=1)
+
             # TODO: Log the probabilities as well?
 
-            pred = topi.squeeze(1)
             for i, query in enumerate(b_queries):
-                if pred[i] in query['gt_ppos_all']:
+                im_id = b_queries[i]['image_id']
+                all_proposals = np.array(validation_loader.dataset.proposals[im_id])
+
+                topv, topi = attn_weights[i,:].topk(topks[i])
+                boxes_pred = all_proposals[topi.cpu().numpy()]
+                pred_groups = exact_group_union(boxes_pred)
+                boxes_pred = [box for g in pred_groups for box in nms(g)]
+
+                boxes_true = all_proposals[b_queries[i]['gt_ppos_ids']]
+
+                multi_iou = calc_iou_multiple(boxes_pred, boxes_true)
+                if multi_iou >= Config.get('iou_threshold'):
                     n_correct += 1
                     corrects.append(1)
                 else:
                     corrects.append(0)
 
+            # TODO: Remove debug prints
             # print(torch.log(attn_weights[0]))
             # print(y[0])
             # print(pred[0])
 
             # Save predictions for drawing
             queries.extend(b_queries)
-            preds.extend(pred.cpu().numpy())
+            preds.append(list(boxes_pred))
 
     n_queries = len(validation_loader.dataset)
     acc = n_correct/n_queries
@@ -77,17 +93,18 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     loader = transforms.ToTensor()
     for (query, pred, correct) in zip(sample_queries, sample_preds, sample_corrects):
         image_id = query['image_id']
-        proposal_bboxes = validation_loader.dataset.proposals[image_id]
+        proposal_bboxes = np.array(validation_loader.dataset.proposals[image_id])
         filename = os.path.join(Config.get('dirs.images.root'), image_id+'.jpg')
 
-        if query['gt_ppos_id'] == len(proposal_bboxes):
+        if len(query['gt_ppos_ids']) == 0:
+            # No gt positive proposals, don't bother drawing it
             continue
-            
-        image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], correct, ' '.join(query['phrase']))
+
+        image = misc.inference_image(filename, query['gt_boxes'], proposal_bboxes[query['gt_ppos_ids']], pred, correct, ' '.join(query['phrase']))
 
         # Saving
         if not global_step:
-            image.save(os.path.join(Config.get('dirs.tmp'), '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
+            image.save(os.path.join(Config.get('dirs.tmp.root'), '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
         else:
             summary_writer.add_image('validation', loader(image), global_step)
 
@@ -111,6 +128,6 @@ if __name__ == "__main__":
 
     grounder = GroundeR(pretrained_embeddings).cuda()
     grounder.load_state_dict(torch.load(Config.get('checkpoint')))
-    acc, loss = evaluate(grounder, val_loader, writer, n_samples=20, global_step=20)
+    acc, loss = evaluate(grounder, val_loader, writer, n_samples=20)
     print("Accuracy: %.3f, Loss: %.3f" % (acc, loss))
 

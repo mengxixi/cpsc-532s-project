@@ -17,6 +17,9 @@ from dataloader import Flickr30K_Entities, QuerySampler
 from language_model import GloVe
 from grounding import GroundeR
 from config import Config
+from util.iou import calc_iou_multiple, exact_group_union
+from util.nms import nms
+
 
 Config.load_config()
 
@@ -78,11 +81,11 @@ def train():
     n_proposals = Config.get('n_proposals')
     im_feat_size = Config.get('im_feat_size')
 
-    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=output_size).cuda()
+    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
     
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
-    criterion = torch.nn.NLLLoss(ignore_index=n_proposals)
+    criterion = torch.nn.MultiLabelSoftMarginLoss()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
@@ -98,8 +101,7 @@ def train():
         running_acc = 0
 
         for batch_idx, data in enumerate(train_loader):
-            b_queries, b_pr_features, b_ph_indices = data
-            b_y = torch.tensor([query['gt_ppos_id'] for query in b_queries]).cuda()
+            b_queries, b_pr_features, b_ph_indices, b_y = data
 
             batch_size = len(b_queries)
 
@@ -108,11 +110,26 @@ def train():
             lstm_c0 = grounder.initCell(batch_size)
             attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
 
-            topv, topi = attn_weights.topk(1)
+            sorted_idx = torch.argsort(attn_weights, dim=1, descending=True)
+            sorted_weights = torch.gather(attn_weights, 1, sorted_idx)
+
+            topks = (sorted_weights.cumsum(dim=1) > Config.get('cumsum_cutoff')).sum(dim=1)
+
+            # TODO: This may be slow, do it every so often?
             train_acc = 0.
-            pred = topi.squeeze(1)
             for i, query in enumerate(b_queries):
-                if pred[i].item() in query['gt_ppos_all']:
+                im_id = b_queries[i]['image_id']
+                all_proposals = np.array(train_loader.dataset.proposals[im_id])
+
+                topv, topi = attn_weights[i,:].topk(topks[i])
+                boxes_pred = all_proposals[topi.cpu().numpy()]
+                pred_groups = exact_group_union(boxes_pred)
+                boxes_pred = [box for g in pred_groups for box in nms(g)]
+
+                boxes_true = all_proposals[b_queries[i]['gt_ppos_ids']]
+
+                multi_iou = calc_iou_multiple(boxes_pred, boxes_true)
+                if multi_iou >= Config.get('iou_threshold'):
                     train_acc += 1
 
             train_acc = train_acc/batch_size
