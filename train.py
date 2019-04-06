@@ -78,7 +78,7 @@ def train():
     n_proposals = Config.get('n_proposals')
     im_feat_size = Config.get('im_feat_size')
 
-    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=output_size).cuda()
+    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
     
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
