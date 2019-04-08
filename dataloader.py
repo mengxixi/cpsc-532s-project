@@ -113,16 +113,16 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         sent_dict = self.sent_deps[sent_id]
         G = torch.FloatTensor(sent_dict['graph']).cuda()
         G = G + torch.eye(G.shape[0]).cuda()
-        Dinv = torch.diag(1/torch.sum(G, axis=0))
+        Dinv = torch.diag(1/torch.sum(G, dim=0))
         
-        sent_indices = torch.LongTensor([self.word2idx[w] if w in self.word2idx else 0 for w in sent_dict['sent']])
-        X = self.embeddings[sent_indices]
+        sent_indices = torch.LongTensor([self.word2idx[w] if w in self.word2idx else 0 for w in sent_dict['sent']]).cuda()
+        X = self.embeddings(sent_indices)
         X = Dinv@G@X
         return X
 
 
     def collate_fn(self, data):
-        sorted_data = zip(*sorted(data, key=lambda l:len(l[2]), reverse=True))
+        sorted_data = zip(*sorted(data, key=lambda l:l[2].shape[0], reverse=True))
         queries, l_proposal_features, l_phrase_features = sorted_data        
 
         l_proposal_features = torch.stack(l_proposal_features, 0)

@@ -30,8 +30,9 @@ class GroundeR(nn.Module):
     def forward(self, im_input, h0c0, ph_input, batch_size):
         # ph_input is a packed sequence of word embeddings
         padded = rnn.pad_packed_sequence(ph_input, batch_first=True, padding_value=0)
-        dropped_emb = self.dropout(padded)
+        dropped_emb = self.dropout(padded[0])
         packed_embedded = rnn.pack_padded_sequence(dropped_emb, padded[1], batch_first=True)
+
 
         _, (hn, cn) = self.lstm(packed_embedded, h0c0)
         hn = self.ph_bn(hn.permute(1,2,0)) 

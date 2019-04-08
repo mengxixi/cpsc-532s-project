@@ -110,7 +110,6 @@ def train():
             train_acc = train_acc/batch_size
 
             loss = criterion(torch.log(attn_weights), b_y)
-            quit()
 
             # Backward and update
             loss.backward()
