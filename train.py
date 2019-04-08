@@ -14,7 +14,6 @@ from tqdm import tqdm
 
 import evaluate
 from dataloader import Flickr30K_Entities, QuerySampler
-from language_model import GloVe
 from grounding import GroundeR
 from config import Config
 
@@ -26,7 +25,6 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 
 # directories
 FLICKR30K_ENTITIES = Config.get('dirs.entities.root')
-PRETRAINED_EMBEDDINGS = Config.get('dirs.tmp.pretrained_embeddings')
 WORD2IDX = Config.get('dirs.tmp.word2idx')
 
 BATCH_SIZE = Config.get('batch_size')

@@ -40,7 +40,7 @@ dirs:
     root: /home/siyi/flickr30k-images
     proposals: proposals
 
-  features: /media/sda1/cathy/features
+  features: features
   annotations: annotations
 
   tmp:

@@ -12,6 +12,7 @@ from torch.nn.utils.rnn import pack_sequence
 from torch import nn
 
 from config import Config
+from language_model import GloVe
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
@@ -36,12 +37,13 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
         # Load pretrained embeddings
         word_embedding_size = Config.get('word_emb_size')
-        if os.path.exists(PRETRAINED_EMBEDDINGS):
-            pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
+        pretrained_path = Config.get('dirs.tmp.pretrained_embeddings')
+        if os.path.exists(pretrained_path):
+            pretrained_embeddings = np.load(pretrained_path)
         else:
             lm = GloVe(Config.get('language_model'), dim=word_embedding_size)
             pretrained_embeddings = np.array([lm.get_word_vector(w) for w in self.word2idx.keys()])
-            np.save(PRETRAINED_EMBEDDINGS, pretrained_embeddings)
+            np.save(pretrained_path, pretrained_embeddings)
 
         self.embeddings = nn.Embedding(len(pretrained_embeddings), word_embedding_size).from_pretrained(torch.from_numpy(pretrained_embeddings)).cuda()
 
@@ -63,7 +65,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
                               'gt_ppos_all'    : anno['gt_ppos_all'][i],
                               'gt_boxes'       : anno['gt_boxes'][i]}
 
-                for j, w in enumerate(anno['phrases'][i]):
+                for j, w in enumerate(phrase_dict['phrase']):
                     if w not in self.word2idx:
                         # Validation/test loader, word unknown
                         query_data['phrase'][j] = 'UNK'
@@ -110,7 +112,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
     def _get_sent_features(self, sent_id):
         sent_dict = self.sent_deps[sent_id]
         G = torch.FloatTensor(sent_dict['graph']).cuda()
-        G = G + torch.eye(G.shape[0])
+        G = G + torch.eye(G.shape[0]).cuda()
         Dinv = torch.diag(1/torch.sum(G, axis=0))
         
         sent_indices = torch.LongTensor([self.word2idx[w] if w in self.word2idx else 0 for w in sent_dict['sent']])
