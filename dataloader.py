@@ -23,7 +23,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         self.word2idx = word2idx if word2idx else {'UNK' : 0}
 
         for im_id in image_ids:
-            with open(os.path.join('annotations', im_id+'.pkl'), 'rb') as f:
+            with open(os.path.join(Config.get('dirs.annotations'), im_id+'.pkl'), 'rb') as f:
                 anno = pickle.load(f)
 
             self.proposals[im_id] = anno['proposals']
