@@ -34,8 +34,8 @@ PRINT_EVERY = Config.get('print_every') # Every x iterations
 EVALUATE_EVERY = Config.get('evaluate_every')
 
 
-def get_dataloader(im_ids, word2idx=None):
-    dataset = Flickr30K_Entities(im_ids, word2idx=word2idx)
+def get_dataloader(im_ids, sent_deps, word2idx=None):
+    dataset = Flickr30K_Entities(im_ids, sent_deps, word2idx=word2idx)
     loader = torch.utils.data.DataLoader(
         dataset, 
         batch_size = BATCH_SIZE, 
@@ -55,11 +55,15 @@ def train():
     train_ids = [x for x in train_ids if x not in nobbox_ids]
     val_ids = [x for x in val_ids if x not in nobbox_ids]
 
-    train_loader = get_dataloader(train_ids)
+    # Load sentence dependencies
+    with open(Config.get('dirs.tmp.sent_deps'), 'rb') as f:
+        sent_deps = pickle.load(f)
+
+    train_loader = get_dataloader(train_ids, sent_deps)
     word2idx = train_loader.dataset.word2idx
     with open(WORD2IDX, 'wb') as f:
         pickle.dump(word2idx, f)
-    val_loader = get_dataloader(val_ids, word2idx=word2idx)
+    val_loader = get_dataloader(val_ids, sent_deps, word2idx=word2idx)
 
 
     # Load pretrained embeddings
@@ -77,8 +81,9 @@ def train():
     concat_size = Config.get('concat_size')
     n_proposals = Config.get('n_proposals')
     im_feat_size = Config.get('im_feat_size')
+    freeze = Config.get('freeze_lm')
 
-    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
+    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals, freeze_lm=freeze).cuda()
     
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))

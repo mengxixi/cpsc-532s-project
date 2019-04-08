@@ -12,7 +12,7 @@ from torch.autograd import Variable
 from torchvision import models, transforms
 from tqdm import tqdm
 from PIL import Image
-from nltk import word_tokenize
+from stanfordcorenlp import StanfordCoreNLP
 
 from config import Config
 import util.flickr30k_entities_utils as flickr30k 
@@ -65,8 +65,13 @@ def preprocess_flickr30k_entities(get_features=True):
     vgg_model.classifier = nn.Sequential(*[vgg_model.classifier[i] for i in range(6)])
     vgg_model.eval()
 
+    nlp = StanfordCoreNLP(Config.get('dirs.corenlp'))
+
     proposal_ub = 0
     n_queries = 0
+
+    sent_deps = {}
+
     for fid in tqdm(ALL_IDS):
         file = os.path.join(IMG_RAW_DIR, Config.get('dirs.images.proposals'), fid+'.pkl')
         if not os.path.exists(file):
@@ -84,28 +89,42 @@ def preprocess_flickr30k_entities(get_features=True):
 
         boxes = anno_data['boxes'] 
 
-        phrase_ids = set()
         phrases = []
         gt_boxes = []
         gt_ppos_all = []
         gt_ppos_ids = []
 
-        for sent in sent_data:
-            for phrase in sent['phrases']:
-                phrase_id = phrase['phrase_id']
+        for sidx, sent_dict in enumerate(sent_data):
+            sent_id = '%s_%d' % (fid, sidx)
+            sentence = sent_dict['sentence']
+            tokens = nlp.word_tokenize(sentence)
+            dependencies = nlp.dependency_parse(sentence)
 
-                if phrase_id in phrase_ids:
-                    # same phrase already parsed in this file
-                    continue
+            # build adjacency matrix over sentence, assume undirected
+            G = np.zeros((len(tokens), len(tokens)))
+            for dep in dependencies:
+                if dep[0] != 'ROOT':
+                    tok1 = dep[1]-1
+                    tok2 = dep[2]-1
+                    G[tok1, tok2] = 1
+                    G[tok2, tok1] = 1
+
+            sent_deps[sent_id] = {'sent'  : tokens, 
+                                  'graph' : G}
+
+            for phrase in sent_dict['phrases']:
+                phrase_id = phrase['phrase_id']
 
                 if phrase_id not in boxes.keys():
                     # only care about phrases that actually has a corresponding box
                     continue
 
-                phrase_ids.add(phrase_id)
+                clean_phrase = nlp.word_tokenize(re.sub(u"(\u2018|\u2019)", "'", phrase['phrase']))
 
-                clean_phrase = re.sub(u"(\u2018|\u2019)", "'", phrase['phrase'])
-                phrases.append(word_tokenize(clean_phrase))
+                phrase_data = {'sent_id'        : sent_id,
+                               'first_word_idx' : phrase['first_word_index'],
+                               'phrase'         : clean_phrase}
+                phrases.append(phrase_data)
 
                 # Union all the gt boxes with its rectangular convex hull
                 # Later we can get rid of this for finer-grained
@@ -150,9 +169,9 @@ def preprocess_flickr30k_entities(get_features=True):
         else:
             print("No boxes annotated for %s.jpg" % fid)
 
-        # TODO: only keep proposals that has a significant overlap with one of the GT boxes??
-        # TODO: union the gt boxes for each phrase (if more than one gt box?)
-        # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
+
+    with open(Config.get('dirs.tmp.sent_deps'), 'wb') as f:
+        pickle.dump(sent_deps, f)
 
     print("Number of queries: %d" % n_queries)
     print("Proposal upper-bound: %.3f" % (proposal_ub/n_queries))

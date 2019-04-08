@@ -14,13 +14,24 @@ from config import Config
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
-    def __init__(self, image_ids, word2idx=None):
+    def __init__(self, image_ids, sent_deps, word2idx=None):
         super().__init__()
 
         self.queries = []
         self.proposals = {}
         self.img2idx = {}
-        self.word2idx = word2idx if word2idx else {'UNK' : 0}
+
+        if not word2idx:
+            self.word2idx = {'UNK' : 0}
+
+            # construct vocabulary based on all sentences in the training set
+            for sent_id, sent_dict in sent_deps.items():
+                for token in sent_dict['sent']:
+                    if token not in self.word2idx:
+                        self.word2idx[token] = len(self.word2idx)
+        else:
+            self.word2idx = word2idx
+
 
         for im_id in image_ids:
             with open(os.path.join('annotations', im_id+'.pkl'), 'rb') as f:
@@ -31,20 +42,19 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
             query_count = 0
             for i, ppos_id in enumerate(anno['gt_ppos_ids']):
                 ppos_id = ppos_id if ppos_id else len(self.proposals[im_id])
-                query_data = {'image_id'   : im_id, 
-                              'phrase'     : anno['phrases'][i],
-                              'gt_ppos_id' : ppos_id,
-                              'gt_ppos_all': anno['gt_ppos_all'][i],
-                              'gt_boxes'   : anno['gt_boxes'][i]}
+                phrase_dict = anno['phrases'][i]
+                query_data = {'image_id'       : im_id, 
+                              'sent_id'        : phrase_dict['sent_id'],
+                              'first_word_idx' : phrase_dict['first_word_idx'],
+                              'phrase'         : phrase_dict['phrase'],
+                              'gt_ppos_id'     : ppos_id,
+                              'gt_ppos_all'    : anno['gt_ppos_all'][i],
+                              'gt_boxes'       : anno['gt_boxes'][i]}
 
                 for j, w in enumerate(anno['phrases'][i]):
                     if w not in self.word2idx:
-                        if not word2idx:
-                            # Train loader, building vocabulary
-                            self.word2idx[w] = len(self.word2idx)
-                        else:
-                            # Validation/test loader, word unknown
-                            query_data['phrase'][j] = 'UNK'
+                        # Validation/test loader, word unknown
+                        query_data['phrase'][j] = 'UNK'
 
                 self.queries.append(query_data)
                 query_count += 1

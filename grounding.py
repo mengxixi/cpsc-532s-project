@@ -6,7 +6,7 @@ from torch.nn.utils import rnn
 
 
 class GroundeR(nn.Module):
-    def __init__(self, pretrained_embeddings, im_feature_size=4096, lm_emb_size=200, hidden_size=50, concat_size=128, output_size=100):
+    def __init__(self, pretrained_embeddings, im_feature_size=4096, lm_emb_size=200, hidden_size=50, concat_size=128, output_size=100, freeze_lm=False):
 
         super().__init__()
 

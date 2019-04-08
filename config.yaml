@@ -4,6 +4,7 @@ concat_size: 128
 n_proposals: 100
 im_feat_size: 4096
 word_emb_size: 200
+freeze_lm: True
 language_model: models/glove/glove.twitter.27B.200d.txt
 checkpoint: models/grounder.ckpt
 
@@ -28,6 +29,8 @@ ids:
   nobbox: nobbox.txt
 
 dirs:
+  corenlp: /home/siyi/stanford-corenlp-full-2018-10-05
+
   entities:
     root: /home/siyi/flickr30k_entities
     anno: /home/siyi/flickr30k_entities/Annotations
@@ -37,12 +40,13 @@ dirs:
     root: /home/siyi/flickr30k-images
     proposals: proposals
 
-  features: features
+  features: /media/sda1/cathy/features
   annotations: annotations
 
   tmp:
     root: tmp
     word2idx: tmp/word2idx.pkl
+    sent_deps: tmp/sentence_dependencies.pkl
     pretrained_embeddings: tmp/embedding.npy
 
 
