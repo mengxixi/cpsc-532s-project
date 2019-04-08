@@ -6,7 +6,7 @@ from torch.nn.utils import rnn
 
 
 class GroundeR(nn.Module):
-    def __init__(self, pretrained_embeddings, im_feature_size=4096, lm_emb_size=200, hidden_size=50, concat_size=128, output_size=100, freeze_lm=False):
+    def __init__(self, im_feature_size=4096, lm_emb_size=200, hidden_size=50, concat_size=128, output_size=100):
 
         super().__init__()
 
@@ -15,8 +15,6 @@ class GroundeR(nn.Module):
         self.hidden_size = hidden_size
         self.concat_size = concat_size
         self.output_size = output_size
-
-        self.word_embeddings = nn.Embedding(len(pretrained_embeddings), lm_emb_size).from_pretrained(torch.from_numpy(pretrained_embeddings), freeze=False)
 
         self.dropout = nn.Dropout()
         self.lstm = nn.LSTM(input_size=lm_emb_size, hidden_size=hidden_size, batch_first=True)
@@ -30,10 +28,9 @@ class GroundeR(nn.Module):
         self.init_params()
 
     def forward(self, im_input, h0c0, ph_input, batch_size):
-        # ph_input is a packed sequence of word indices
+        # ph_input is a packed sequence of word embeddings
         padded = rnn.pad_packed_sequence(ph_input, batch_first=True, padding_value=0)
-        embedded = self.word_embeddings(padded[0])
-        dropped_emb = self.dropout(embedded)
+        dropped_emb = self.dropout(padded)
         packed_embedded = rnn.pack_padded_sequence(dropped_emb, padded[1], batch_first=True)
 
         _, (hn, cn) = self.lstm(packed_embedded, h0c0)

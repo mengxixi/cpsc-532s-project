@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from torch.nn.utils.rnn import pack_sequence
+from torch import nn
 
 from config import Config
 
@@ -20,6 +21,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         self.queries = []
         self.proposals = {}
         self.img2idx = {}
+        self.sent_deps = sent_deps
 
         if not word2idx:
             self.word2idx = {'UNK' : 0}
@@ -32,6 +34,16 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         else:
             self.word2idx = word2idx
 
+        # Load pretrained embeddings
+        word_embedding_size = Config.get('word_emb_size')
+        if os.path.exists(PRETRAINED_EMBEDDINGS):
+            pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
+        else:
+            lm = GloVe(Config.get('language_model'), dim=word_embedding_size)
+            pretrained_embeddings = np.array([lm.get_word_vector(w) for w in self.word2idx.keys()])
+            np.save(PRETRAINED_EMBEDDINGS, pretrained_embeddings)
+
+        self.embeddings = nn.Embedding(len(pretrained_embeddings), word_embedding_size).from_pretrained(torch.from_numpy(pretrained_embeddings)).cuda()
 
         for im_id in image_ids:
             with open(os.path.join('annotations', im_id+'.pkl'), 'rb') as f:
@@ -75,10 +87,17 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         query = self.queries[index]
 
         proposal_features = torch.FloatTensor(self._get_vis_features(query['image_id'])).cuda()
-        phrase_indices = torch.LongTensor([self.word2idx[w] for w in query['phrase']]).cuda()
+
+        phrase = query['phrase']
+        start = query['first_word_idx']
+        end = start + len(phrase)
+        phrase_indices_in_sent = torch.arange(start, end, dtype=torch.int64)
+
+        X = self._get_sent_features(query['sent_id'])
+        phrase_features = X[phrase_indices_in_sent]
         # print(self._get_features.cache_info())
 
-        return query, proposal_features, phrase_indices
+        return query, proposal_features, phrase_features
 
 
     @lru_cache(maxsize=100) 
@@ -87,14 +106,27 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         return features
 
 
+    @lru_cache(maxsize=10) # cache size based on number of phrases per sentence
+    def _get_sent_features(self, sent_id):
+        sent_dict = self.sent_deps[sent_id]
+        G = torch.FloatTensor(sent_dict['graph']).cuda()
+        G = G + torch.eye(G.shape[0])
+        Dinv = torch.diag(1/torch.sum(G, axis=0))
+        
+        sent_indices = torch.LongTensor([self.word2idx[w] if w in self.word2idx else 0 for w in sent_dict['sent']])
+        X = self.embeddings[sent_indices]
+        X = Dinv@G@X
+        return X
+
+
     def collate_fn(self, data):
         sorted_data = zip(*sorted(data, key=lambda l:len(l[2]), reverse=True))
-        queries, l_proposal_features, l_phrase_indices = sorted_data        
+        queries, l_proposal_features, l_phrase_features = sorted_data        
 
         l_proposal_features = torch.stack(l_proposal_features, 0)
-        l_phrase_indices = pack_sequence(list(l_phrase_indices))
+        l_phrase_features = pack_sequence(list(l_phrase_features))
 
-        return list(queries), l_proposal_features, l_phrase_indices
+        return list(queries), l_proposal_features, l_phrase_features
 
 
 class QuerySampler(torch.utils.data.Sampler):

@@ -65,25 +65,14 @@ def train():
         pickle.dump(word2idx, f)
     val_loader = get_dataloader(val_ids, sent_deps, word2idx=word2idx)
 
-
-    # Load pretrained embeddings
-    word_embedding_size = Config.get('word_emb_size')
-    if os.path.exists(PRETRAINED_EMBEDDINGS):
-        pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
-    else:
-        lm = GloVe(Config.get('language_model'), dim=word_embedding_size)
-        pretrained_embeddings = np.array([lm.get_word_vector(w) for w in word2idx.keys()])
-        np.save(PRETRAINED_EMBEDDINGS, pretrained_embeddings)
-
-
     # Model, optimizer, etc.
     hidden_size = Config.get('hidden_size')
     concat_size = Config.get('concat_size')
     n_proposals = Config.get('n_proposals')
     im_feat_size = Config.get('im_feat_size')
-    freeze = Config.get('freeze_lm')
+    word_embedding_size = Config.get('word_emb_size')
 
-    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals, freeze_lm=freeze).cuda()
+    grounder = GroundeR(im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
     
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
@@ -103,7 +92,7 @@ def train():
         running_acc = 0
 
         for batch_idx, data in enumerate(train_loader):
-            b_queries, b_pr_features, b_ph_indices = data
+            b_queries, b_pr_features, b_ph_features = data
             b_y = torch.tensor([query['gt_ppos_id'] for query in b_queries]).cuda()
 
             batch_size = len(b_queries)
@@ -111,7 +100,7 @@ def train():
             # Foward
             lstm_h0 = grounder.initHidden(batch_size)
             lstm_c0 = grounder.initCell(batch_size)
-            attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
+            attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
 
             topv, topi = attn_weights.topk(1)
             train_acc = 0.
@@ -123,6 +112,7 @@ def train():
             train_acc = train_acc/batch_size
 
             loss = criterion(torch.log(attn_weights), b_y)
+            quit()
 
             # Backward and update
             loss.backward()

@@ -14,9 +14,9 @@ from tqdm import tqdm
 from PIL import Image
 from stanfordcorenlp import StanfordCoreNLP
 
-from config import Config
 import util.flickr30k_entities_utils as flickr30k 
 from util.iou import calc_iou, rec_convex_hull_union
+from config import Config
 
 Config.load_config()
 
