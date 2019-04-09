@@ -87,7 +87,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
         # Saving
         if not global_step:
-            image.save(os.path.join(Config.get('dirs.tmp'), '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
+            image.save(os.path.join(Config.get('dirs.tmp.root'), '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
         else:
             summary_writer.add_image('validation', loader(image), global_step)
 
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     with open(WORD2IDX, 'rb') as f:
         word2idx = pickle.load(f)
 
-    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.val'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f2:
+    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.test'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f2:
         val_ids = f1.read().splitlines()
         nobbox_ids = f2.read().splitlines()
 
@@ -111,6 +111,6 @@ if __name__ == "__main__":
 
     grounder = GroundeR(pretrained_embeddings).cuda()
     grounder.load_state_dict(torch.load(Config.get('checkpoint')))
-    acc, loss = evaluate(grounder, val_loader, writer, n_samples=20, global_step=20)
-    print("Accuracy: %.3f, Loss: %.3f" % (acc, loss))
+    acc, loss = evaluate(grounder, val_loader, writer, n_samples=20)
+    print("Test Accuracy: %.3f, Loss: %.3f" % (acc, loss))
 
