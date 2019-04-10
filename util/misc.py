@@ -1,7 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
 
-def inference_image(image_fname, gt_boxes, gt_prop_boxes, pred_boxes, correct, phrase):
+def inference_image(image_fname, gt_boxes, gt_prop_boxes, pred_boxes, correct, phrase, sentence, first_word_idx):
     image = Image.open(image_fname).convert('RGB')
     draw = ImageDraw.Draw(image)
 
@@ -12,7 +12,7 @@ def inference_image(image_fname, gt_boxes, gt_prop_boxes, pred_boxes, correct, p
         drawrect(draw, box, outline='yellow', width=3)
 
     # Draw predicted boxes
-    pred_color = 'blue' if correct == 1 else 'red'
+    pred_color = 'red' if correct == '0' else 'blue'
     for box in pred_boxes:
         drawrect(draw, box, outline=pred_color, width=3)
 
@@ -23,12 +23,13 @@ def inference_image(image_fname, gt_boxes, gt_prop_boxes, pred_boxes, correct, p
 
     # Write text
     strip_h = 25
-    bg = Image.new('RGB', (image.size[0], image.size[1]+2*strip_h), color='black')
+    bg = Image.new('RGB', (image.size[0], image.size[1]+3*strip_h), color='black')
     drawbg = ImageDraw.Draw(bg)
     font = ImageFont.truetype('/home/siyi/fonts/Calibri.ttf', 15)
-    top_desc = ' %s, accuracy: %d' % (image_fname.split('/')[-1][:-4], correct)
+    top_desc = ' %s, accuracy: %s' % (image_fname.split('/')[-1][:-4], correct)
     drawbg.text((0,0), top_desc, fill='white', font=font)
-    drawbg.text((0,strip_h+image.size[1]), ' '+phrase, fill='white', font=font)
+    drawbg.text((0,strip_h+image.size[1]), ' %s, %d' % (phrase, first_word_idx), fill='white', font=font)
+    drawbg.text((0,strip_h*2+image.size[1]), ' '+sentence, fill='white', font=font)
     bg.paste(image, (0,strip_h))
     return bg
 

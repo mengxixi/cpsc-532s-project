@@ -23,11 +23,12 @@ PRETRAINED_EMBEDDINGS = Config.get('dirs.tmp.pretrained_embeddings')
 WORD2IDX = Config.get('dirs.tmp.word2idx')
 
 
-def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_samples=5):
+def evaluate(model, validation_loader, sent_deps, summary_writer=None, global_step=None, n_samples=5):
     model.eval()
     queries = []
     preds = []
     corrects = []
+    probs = []
 
     n_correct = 0.
     criterion = torch.nn.NLLLoss(reduction='sum', ignore_index=Config.get('n_proposals'))
@@ -49,10 +50,11 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
             # Get topk
             topv, topi = attn_weights.topk(1)
-            # TODO: Log the probabilities as well?
 
             pred = topi.squeeze(1)
+            prob = topv.squeeze(1)
             for i, query in enumerate(b_queries):
+                probs.append(prob[i])
                 if pred[i] in query['gt_ppos_all']:
                     n_correct += 1
                     corrects.append(1)
@@ -72,22 +74,26 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     val_loss = val_loss/n_queries
 
     # Drawing samples
-    sample_queries, sample_preds, sample_corrects = zip(*random.sample(list(zip(queries, preds, corrects)), n_samples))
+    sample_queries, sample_preds, sample_probs, sample_corrects = zip(*random.sample(list(zip(queries, preds, probs, corrects)), n_samples))
 
     loader = transforms.ToTensor()
-    for (query, pred, correct) in zip(sample_queries, sample_preds, sample_corrects):
+    for (query, pred, prob, correct) in zip(sample_queries, sample_preds, sample_probs, sample_corrects):
         image_id = query['image_id']
+        sentence = ' '.join(sent_deps[query['sent_id']]['sent'])
+        first_word_idx = query['first_word_idx']
         proposal_bboxes = validation_loader.dataset.proposals[image_id]
         filename = os.path.join(Config.get('dirs.images.root'), image_id+'.jpg')
 
         if query['gt_ppos_id'] == len(proposal_bboxes):
             continue
+
+        query_acc = '1, prob:%.3f' % prob if correct==1 else '0'
             
-        image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], correct, ' '.join(query['phrase']))
+        image = misc.inference_image(filename, query['gt_boxes'], [proposal_bboxes[query['gt_ppos_id']]], [proposal_bboxes[pred]], query_acc, ' '.join(query['phrase']), sentence, first_word_idx)
 
         # Saving
         if not global_step:
-            image.save(os.path.join(Config.get('dirs.tmp'), '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
+            image.save(os.path.join(Config.get('dirs.tmp.root'), '%s_%s.png' % (image_id, '_'.join(query['phrase']))), 'PNG')
         else:
             summary_writer.add_image('validation', loader(image), global_step)
 
@@ -95,22 +101,25 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
 
 
 if __name__ == "__main__":    
-    pretrained_embeddings = np.load(PRETRAINED_EMBEDDINGS)
     with open(WORD2IDX, 'rb') as f:
         word2idx = pickle.load(f)
 
-    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.val'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f2:
+    # Load sentence dependencies
+    with open(Config.get('dirs.tmp.sent_deps'), 'rb') as f:
+        sent_deps = pickle.load(f)
+
+    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.test'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f2:
         val_ids = f1.read().splitlines()
         nobbox_ids = f2.read().splitlines()
 
     val_ids = [x for x in val_ids if x not in nobbox_ids]
-    val_loader = train.get_dataloader(val_ids, word2idx=word2idx)
+    val_loader = train.get_dataloader(val_ids, sent_deps, word2idx=word2idx)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
 
-    grounder = GroundeR(pretrained_embeddings).cuda()
+    grounder = GroundeR().cuda()
     grounder.load_state_dict(torch.load(Config.get('checkpoint')))
-    acc, loss = evaluate(grounder, val_loader, writer, n_samples=20, global_step=20)
-    print("Accuracy: %.3f, Loss: %.3f" % (acc, loss))
+    acc, loss = evaluate(grounder, val_loader, sent_deps, writer, n_samples=20)
+    print("Test Accuracy: %.3f, Loss: %.3f" % (acc, loss))
 

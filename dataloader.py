@@ -111,7 +111,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
     @lru_cache(maxsize=10) # cache size based on number of phrases per sentence
     def _get_sent_features(self, sent_id):
         sent_dict = self.sent_deps[sent_id]
-        G = torch.FloatTensor(sent_dict['graph']).cuda()
+        G = 0.5*torch.FloatTensor(sent_dict['graph']).cuda()
         G = G + torch.eye(G.shape[0]).cuda()
         Dinv = torch.diag(1/torch.sum(G, dim=0))
         
