@@ -82,7 +82,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
 
     @lru_cache(maxsize=100) 
     def _get_vis_features(self, im_id):
-        features = np.load(os.path.join('features', im_id+'.npy'))
+        features = np.load(os.path.join(Config.get('dirs.features'), im_id+'.npy'))
         return features
 
 

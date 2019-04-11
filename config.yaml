@@ -43,7 +43,7 @@ dirs:
 
   tmp:
     root: tmp
-    word2idx: tmp/word2idx.pkl
-    pretrained_embeddings: tmp/embedding.npy
+    word2idx: tmp/word2idx_v2.pkl
+    pretrained_embeddings: tmp/embedding_v2.npy
 
 

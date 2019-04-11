@@ -85,7 +85,6 @@ def preprocess_flickr30k_entities(get_features=True):
 
         boxes = anno_data['boxes'] 
 
-        phrase_ids = set()
         phrases = []
         gt_boxes = []
         gt_ppos_all = []
@@ -95,15 +94,9 @@ def preprocess_flickr30k_entities(get_features=True):
             for phrase in sent['phrases']:
                 phrase_id = phrase['phrase_id']
 
-                if phrase_id in phrase_ids:
-                    # same phrase already parsed in this file
-                    continue
-
                 if phrase_id not in boxes.keys():
                     # only care about phrases that actually has a corresponding box
                     continue
-
-                phrase_ids.add(phrase_id)
 
                 clean_phrase = re.sub(u"(\u2018|\u2019)", "'", phrase['phrase'])
                 phrases.append(word_tokenize(clean_phrase))

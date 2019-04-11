@@ -120,7 +120,7 @@ if __name__ == "__main__":
     with open(WORD2IDX, 'rb') as f:
         word2idx = pickle.load(f)
 
-    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.val'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f2:
+    with open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.test'))) as f1, open(os.path.join(FLICKR30K_ENTITIES, Config.get('ids.nobbox'))) as f2:
         val_ids = f1.read().splitlines()
         nobbox_ids = f2.read().splitlines()
 
@@ -133,5 +133,5 @@ if __name__ == "__main__":
     grounder = GroundeR(pretrained_embeddings).cuda()
     grounder.load_state_dict(torch.load(Config.get('checkpoint')))
     acc, loss = evaluate(grounder, val_loader, writer, n_samples=20)
-    print("Accuracy: %.3f, Loss: %.3f" % (acc, loss))
+    print("Test Accuracy: %.3f, Loss: %.3f" % (acc, loss))
 
