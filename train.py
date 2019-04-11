@@ -71,6 +71,9 @@ def train():
     word_embedding_size = Config.get('word_emb_size')
 
     grounder = GroundeR(im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
+    if Config.get('from_ckpt'):
+        grounder.load_state_dict(torch.load(Config.get('checkpoint')))
+        grounder.train()
     
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
