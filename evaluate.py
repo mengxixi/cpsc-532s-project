@@ -6,7 +6,6 @@ from datetime import datetime
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 from torchvision import transforms
 
@@ -50,23 +49,22 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             val_loss += criterion(raw_attn_weights, b_y)
 
             # Get topk
-            attn_weights = F.softmax(raw_attn_weights, dim=1)
-            sorted_idx = torch.argsort(attn_weights, dim=1, descending=True)
-            sorted_weights = torch.gather(attn_weights, 1, sorted_idx)
+            attn_weights = torch.sigmoid(raw_attn_weights)
 
-            topks = (sorted_weights.cumsum(dim=1) > Config.get('cumsum_cutoff')).sum(dim=1)
 
             # TODO: Log the probabilities as well?
-
             batch_pred = []
             for i, query in enumerate(b_queries):
                 im_id = b_queries[i]['image_id']
                 all_proposals = np.array(validation_loader.dataset.proposals[im_id])
 
-                topv, topi = attn_weights[i,:].topk(topks[i])
+                weights = attn_weights[i,:]
+                topi = weights >= Config.get('confidence')
+                topv = weights[topi]
+
                 boxes_pred = all_proposals[topi.cpu().numpy()]
-                pred_groups = exact_group_union(boxes_pred)
-                boxes_pred = [box for g in pred_groups for box in nms(g)]
+                # pred_groups = exact_group_union(boxes_pred)
+                # boxes_pred = [box for g in pred_groups for box in nms(g)]
 
                 boxes_true = all_proposals[b_queries[i]['gt_ppos_ids']]
 

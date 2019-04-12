@@ -8,7 +8,6 @@ from datetime import datetime
 import numpy as np
 import torch
 import torch.utils.data
-import torch.nn.functional as F
 from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -111,28 +110,26 @@ def train():
             lstm_c0 = grounder.initCell(batch_size)
             raw_attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
 
-            attn_weights = F.softmax(raw_attn_weights, dim=1)
-            sorted_idx = torch.argsort(attn_weights, dim=1, descending=True)
-            sorted_weights = torch.gather(attn_weights, 1, sorted_idx)
-
-            topks = (sorted_weights.cumsum(dim=1) > Config.get('cumsum_cutoff')).sum(dim=1)
+            attn_weights = torch.sigmoid(raw_attn_weights)
 
             # TODO: This may be slow, do it every so often?
             train_acc = 0.
-            for i, query in enumerate(b_queries):
-                im_id = b_queries[i]['image_id']
-                all_proposals = np.array(train_loader.dataset.proposals[im_id])
+            # for i, query in enumerate(b_queries):
+            #     im_id = b_queries[i]['image_id']
+            #     all_proposals = np.array(train_loader.dataset.proposals[im_id])
 
-                topv, topi = attn_weights[i,:].topk(topks[i])
-                boxes_pred = all_proposals[topi.cpu().numpy()]
-                pred_groups = exact_group_union(boxes_pred)
-                boxes_pred = [box for g in pred_groups for box in nms(g)]
+            #     weights = attn_weights[i,:]
+            #     topi = weights >= Config.get('confidence')
+            #     topv = weights[topi]
+            #     boxes_pred = all_proposals[topi.cpu().numpy()]
+            #     pred_groups = exact_group_union(boxes_pred)
+            #     boxes_pred = [box for g in pred_groups for box in nms(g)]
 
-                boxes_true = all_proposals[b_queries[i]['gt_ppos_ids']]
+            #     boxes_true = all_proposals[b_queries[i]['gt_ppos_ids']]
 
-                multi_iou = calc_iou_multiple(boxes_pred, boxes_true)
-                if multi_iou >= Config.get('iou_threshold'):
-                    train_acc += 1
+            #     multi_iou = calc_iou_multiple(boxes_pred, boxes_true)
+            #     if multi_iou >= Config.get('iou_threshold'):
+            #         train_acc += 1
 
             train_acc = train_acc/batch_size
 

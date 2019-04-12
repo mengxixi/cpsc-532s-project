@@ -106,9 +106,7 @@ def preprocess_flickr30k_entities(get_features=True):
 
                 good_ids = set()
                 for gt in boxes[phrase_id]:
-                    # TODO: Greedy way of finding the best set of proposals to
-                    # be used as target labels for training, refine to make UB 
-                    # higher?
+                    # Greedy way of finding the best set of proposals
                     best_match = -1
                     best_iou = 0.0
                     for i, proposal in enumerate(proposal_boxes):

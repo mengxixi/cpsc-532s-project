@@ -26,6 +26,7 @@ class GroundeR(nn.Module):
         self.ph_proj = nn.Linear(hidden_size, concat_size)
         self.im_proj = nn.Linear(im_feature_size, concat_size)
         self.attn = nn.Linear(concat_size, 1)
+        self.attn_bn = nn.BatchNorm1d(output_size)
 
         self.init_params()
 
@@ -47,6 +48,7 @@ class GroundeR(nn.Module):
         out = F.relu((ph_concat + im_concat))
 
         attn_weights_raw = self.attn(out).squeeze(2) # [bs, 100, 1]
+        attn_weights_raw = self.attn_bn(attn_weights_raw)
 
         return attn_weights_raw
 
