@@ -14,7 +14,7 @@ learning_rate: 0.001
 sched_steps: [15, 25]
 weight_decay: 0.0005
 print_every: 100
-evaluate_every: 10000
+evaluate_every: 50000
 
 # misc
 confidence: 0.9

@@ -36,6 +36,11 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     val_loss = 0
 
     for batch_idx, data in enumerate(validation_loader):
+        if batch_idx == 8:
+            # TODO: break early, it's too slow
+            # get rid of this when below is optimized..
+            break
+
         b_queries, b_pr_features, b_ph_features, b_y = data
 
         batch_size = len(b_queries)
@@ -51,20 +56,19 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             # Get topk
             attn_weights = torch.sigmoid(raw_attn_weights)
 
-
             # TODO: Log the probabilities as well?
+
+            topi = attn_weights >= Config.get('confidence')
+            topv = attn_weights[topi]
+
             batch_pred = []
             for i, query in enumerate(b_queries):
                 im_id = b_queries[i]['image_id']
                 all_proposals = np.array(validation_loader.dataset.proposals[im_id])
 
-                weights = attn_weights[i,:]
-                topi = weights >= Config.get('confidence')
-                topv = weights[topi]
-
-                boxes_pred = all_proposals[topi.cpu().numpy()]
-                # pred_groups = exact_group_union(boxes_pred)
-                # boxes_pred = [box for g in pred_groups for box in nms(g)]
+                boxes_pred = all_proposals[topi[i].cpu().numpy()]
+                pred_groups = exact_group_union(boxes_pred)
+                boxes_pred = [box for g in pred_groups for box in nms(g)]
 
                 boxes_true = all_proposals[b_queries[i]['gt_ppos_ids']]
 

@@ -20,8 +20,6 @@ class GroundeR(nn.Module):
 
         self.dropout = nn.Dropout()
         self.lstm = nn.LSTM(input_size=lm_emb_size, hidden_size=hidden_size, batch_first=True)
-        self.ph_bn = nn.BatchNorm1d(hidden_size)
-        self.im_bn = nn.BatchNorm1d(im_feature_size)
 
         self.ph_proj = nn.Linear(hidden_size, concat_size)
         self.im_proj = nn.Linear(im_feature_size, concat_size)
@@ -38,12 +36,10 @@ class GroundeR(nn.Module):
         packed_embedded = rnn.pack_padded_sequence(dropped_emb, padded[1], batch_first=True)
 
         _, (hn, cn) = self.lstm(packed_embedded, h0c0)
-        hn = self.ph_bn(hn.permute(1,2,0)) 
-        ph_concat = self.ph_proj(hn.permute(0,2,1))
+        ph_concat = self.ph_proj(hn).permute(1,0,2)
 
         dropped_im = self.dropout(im_input)
-        im_bn = self.im_bn(dropped_im.permute(0,2,1))
-        im_concat = self.im_proj(im_bn.permute(0,2,1))
+        im_concat = self.im_proj(dropped_im)
 
         out = F.relu((ph_concat + im_concat))
 
