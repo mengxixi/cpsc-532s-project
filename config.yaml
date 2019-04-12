@@ -35,9 +35,9 @@ dirs:
 
   images:
     root: /home/siyi/flickr30k-images
-    proposals: proposals
+    proposals: proposals_v2
 
-  features: features
+  features: features_v2
   annotations: annotations_v2
 
   tmp:
