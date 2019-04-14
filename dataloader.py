@@ -48,7 +48,7 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
         self.embeddings = nn.Embedding(len(pretrained_embeddings), word_embedding_size).from_pretrained(torch.from_numpy(pretrained_embeddings)).cuda()
 
         for im_id in image_ids:
-            with open(os.path.join('annotations', im_id+'.pkl'), 'rb') as f:
+            with open(os.path.join(Config.get('dirs.annotations'), im_id+'.pkl'), 'rb') as f:
                 anno = pickle.load(f)
 
             self.proposals[im_id] = anno['proposals']

@@ -160,8 +160,9 @@ Backup[ ]of[ ]*.numbers/
 ._*.yaml
 
 # Data directories
-features
+features*
 models
 logs
 annotations*
 tmp
+tmp.py

@@ -47,7 +47,7 @@ def load_crop(filename, box):
 
 
 def generate_features(im_file, boxes, model):
-    batch_size =32
+    batch_size = 32
     crops = [load_crop(im_file, box) for box in boxes]
 
     features = np.empty([len(crops), Config.get('im_feat_size')])

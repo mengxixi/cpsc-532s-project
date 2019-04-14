@@ -7,7 +7,6 @@ word_emb_size: 200
 freeze_lm: True
 language_model: models/glove/glove.twitter.27B.200d.txt
 checkpoint: models/grounder_sent_graph.ckpt
-from_ckpt: False
 
 # training parameters
 batch_size: 64
@@ -41,7 +40,7 @@ dirs:
     root: /home/siyi/flickr30k-images
     proposals: proposals
 
-  features: features
+  features: features_vgg
   annotations: annotations
 
   tmp:

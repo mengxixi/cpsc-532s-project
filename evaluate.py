@@ -117,8 +117,15 @@ if __name__ == "__main__":
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
+    
+    word_embedding_size = Config.get('word_emb_size')
+    hidden_size = Config.get('hidden_size')
+    concat_size = Config.get('concat_size')
+    n_proposals = Config.get('n_proposals')
+    im_feat_size = Config.get('im_feat_size')
 
-    grounder = GroundeR().cuda()
+    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
+
     grounder.load_state_dict(torch.load(Config.get('checkpoint')))
     acc, loss = evaluate(grounder, val_loader, sent_deps, writer, n_samples=20)
     print("Test Accuracy: %.3f, Loss: %.3f" % (acc, loss))
