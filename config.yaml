@@ -2,7 +2,7 @@
 hidden_size: 50
 concat_size: 128
 n_proposals: 100
-im_feat_size: 4096
+im_feat_size: 512
 word_emb_size: 200
 language_model: models/glove/glove.twitter.27B.200d.txt
 checkpoint: models/grounder.ckpt
@@ -35,14 +35,14 @@ dirs:
 
   images:
     root: /home/siyi/flickr30k-images
-    proposals: proposals_v2
+    proposals: proposals
 
-  features: features_v2
-  annotations: annotations_v2
+  features: features
+  annotations: annotations
 
   tmp:
     root: tmp
-    word2idx: tmp/word2idx_v2.pkl
-    pretrained_embeddings: tmp/embedding_v2.npy
+    word2idx: tmp/word2idx.pkl
+    pretrained_embeddings: tmp/embedding.npy
 
 
