@@ -2,7 +2,7 @@
 hidden_size: 50
 concat_size: 128
 n_proposals: 100
-im_feat_size: 4096
+im_feat_size: 512
 word_emb_size: 200
 freeze_lm: True
 language_model: models/glove/glove.twitter.27B.200d.txt
@@ -40,13 +40,13 @@ dirs:
     root: /home/siyi/flickr30k-images
     proposals: proposals
 
-  features: features_vgg
-  annotations: annotations
+  features: features_scene_graph
+  annotations: annotations_sent_graph
 
   tmp:
     root: tmp
-    word2idx: tmp/word2idx.pkl
+    word2idx: tmp/word2idx_sent_graph.pkl
     sent_deps: tmp/sentence_dependencies.pkl
-    pretrained_embeddings: tmp/embedding.npy
+    pretrained_embeddings: tmp/embedding_sent_graph.npy
 
 
