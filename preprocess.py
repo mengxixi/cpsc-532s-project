@@ -48,7 +48,7 @@ def load_crop(filename, box):
 
 
 def generate_features(im_file, boxes, model):
-    batch_size =32
+    batch_size = 32
     crops = [load_crop(im_file, box) for box in boxes]
 
     features = np.empty([len(crops), Config.get('im_feat_size')])
@@ -150,6 +150,8 @@ def preprocess_flickr30k_entities(get_features=True):
 
         else:
             print("No boxes annotated for %s.jpg" % fid)
+
+        # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
 
     print("Number of queries: %d" % n_queries)
     print("Proposal upper-bound: %.3f" % (proposal_ub/n_queries))
