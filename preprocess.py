@@ -143,8 +143,6 @@ def preprocess_flickr30k_entities(get_features=True):
         else:
             print("No boxes annotated for %s.jpg" % fid)
 
-        # TODO: only keep proposals that has a significant overlap with one of the GT boxes??
-        # TODO: union the gt boxes for each phrase (if more than one gt box?)
         # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
 
     print("Number of queries: %d" % n_queries)
