@@ -7,7 +7,7 @@ im_scene_feat_size: 512
 use_scene: True
 word_emb_size: 200
 language_model: models/glove/glove.twitter.27B.200d.txt
-checkpoint: models/grounder.ckpt
+checkpoint: models/grounder_multi.ckpt
 
 # training parameters
 batch_size: 64
@@ -42,11 +42,11 @@ dirs:
 
   features: features_vgg
   scene_features: features_scene_graph
-  annotations: annotations
+  annotations: annotations_multi
 
   tmp:
     root: tmp
-    word2idx: tmp/word2idx.pkl
-    pretrained_embeddings: tmp/embedding.npy
+    word2idx: tmp/word2idx_multi.pkl
+    pretrained_embeddings: tmp/embedding_multi.npy
 
 
