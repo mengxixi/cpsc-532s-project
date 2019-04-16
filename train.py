@@ -87,7 +87,7 @@ def train():
     
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
-    criterion = torch.nn.MultiLabelSoftMarginLoss()
+    criterion = torch.nn.BCEWithLogitsLoss()
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
@@ -112,9 +112,10 @@ def train():
             lstm_c0 = grounder.initCell(batch_size)
             raw_attn_weights = grounder(b_pr_features, (lstm_h0, lstm_c0), b_ph_indices, batch_size)
 
-            attn_weights = torch.sigmoid(raw_attn_weights)
+            # attn_weights = torch.sigmoid(raw_attn_weights)
 
             # TODO: This may be slow, do it every so often?
+            # TODO: Bring back training accuracy logging when ready
             train_acc = 0.
             # for i, query in enumerate(b_queries):
             #     im_id = b_queries[i]['image_id']
@@ -132,8 +133,7 @@ def train():
             #     multi_iou = calc_iou_multiple(boxes_pred, boxes_true)
             #     if multi_iou >= Config.get('iou_threshold'):
             #         train_acc += 1
-
-            train_acc = train_acc/batch_size
+            # train_acc = train_acc/batch_size
 
             loss = criterion(raw_attn_weights, b_y)
 

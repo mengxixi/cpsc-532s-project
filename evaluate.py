@@ -32,7 +32,7 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
     corrects = []
 
     n_correct = 0.
-    criterion = torch.nn.MultiLabelSoftMarginLoss()
+    criterion = torch.nn.BCEWithLogitsLoss()
     val_loss = 0
 
     for batch_idx, data in enumerate(validation_loader):
@@ -49,24 +49,30 @@ def evaluate(model, validation_loader, summary_writer=None, global_step=None, n_
             # Forward
             lstm_h0 = model.initHidden(batch_size)
             lstm_c0 = model.initCell(batch_size)
-            raw_attn_weights = model(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
+            attn_weights = model(b_pr_features, (lstm_h0, lstm_c0), b_ph_features, batch_size)
 
-            val_loss += criterion(raw_attn_weights, b_y)
+            val_loss += criterion(attn_weights, b_y)
 
-            # Get topk
-            attn_weights = torch.sigmoid(raw_attn_weights)
+            attn_weights = torch.sigmoid(attn_weights)
+            mask = (attn_weights >= Config.get('confidence')).type(torch.cuda.FloatTensor)
 
             # TODO: Log the probabilities as well?
-
-            topi = attn_weights >= Config.get('confidence')
-            topv = attn_weights[topi]
+            masked_weights = attn_weights * mask
 
             batch_pred = []
             for i, query in enumerate(b_queries):
                 im_id = b_queries[i]['image_id']
                 all_proposals = np.array(validation_loader.dataset.proposals[im_id])
 
-                boxes_pred = all_proposals[topi[i].cpu().numpy()]
+                selected = mask[i].nonzero().squeeze(1)
+
+                if len(selected) == 0:
+                    # Nothing confident
+                    corrects.append(0)
+                    batch_pred.append([])
+                    continue
+
+                boxes_pred = all_proposals[selected.cpu().numpy()]
                 pred_groups = exact_group_union(boxes_pred)
                 boxes_pred = [box for g in pred_groups for box in nms(g)]
 

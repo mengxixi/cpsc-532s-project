@@ -2,9 +2,9 @@
 hidden_size: 50
 concat_size: 128
 n_proposals: 100
-im_feat_size: 4096
+im_feat_size: 512 # TODO: Only use scene graph features for now
 im_scene_feat_size: 512
-use_scene: True
+use_scene: False
 word_emb_size: 200
 language_model: models/glove/glove.twitter.27B.200d.txt
 checkpoint: models/grounder_multi.ckpt
@@ -19,7 +19,7 @@ print_every: 100
 evaluate_every: 50000
 
 # misc
-confidence: 0.9
+confidence: 0.5
 iou_threshold: 0.5
 crop_size: 224
 
@@ -40,7 +40,7 @@ dirs:
     root: /home/siyi/flickr30k-images
     proposals: proposals
 
-  features: features_vgg
+  features: features_scene_graph  # TODO: Only use scene graph features for now
   scene_features: features_scene_graph
   annotations: annotations_multi
 
