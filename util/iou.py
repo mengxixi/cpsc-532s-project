@@ -44,8 +44,8 @@ def calc_iou_multiple(boxes1, boxes2):
     union = poly1.union(poly2).area
 
     iou = float(inter) / float(union)
-    if iou < 0:
-        iou = 0.0
+    iou = max(iou, 0.0) # underflow?
+
     return iou
 
 
