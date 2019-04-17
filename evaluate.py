@@ -124,7 +124,7 @@ if __name__ == "__main__":
     n_proposals = Config.get('n_proposals')
     im_feat_size = Config.get('im_feat_size')
 
-    grounder = GroundeR(pretrained_embeddings, im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
+    grounder = GroundeR(im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
 
     grounder.load_state_dict(torch.load(Config.get('checkpoint')))
     acc, loss = evaluate(grounder, val_loader, sent_deps, writer, n_samples=20)
