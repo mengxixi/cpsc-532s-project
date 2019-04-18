@@ -28,27 +28,60 @@ class DecoderLSTM(nn.Module):
         super(DecoderLSTM, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.proj = nn.Linear(4096, hidden_size)
+        self.proj = nn.Linear(4096, 100)
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x, h0, c0, batch_size):
-        output = x.view(1, batch_size, self.input_size)
-        output, (hn, cn) = self.lstm(output, (h0, c0)) 
+    def forward(self, x, h0, c0):
+        output, (hn, cn) = self.lstm(x, (h0, c0)) 
         output = self.out(output)
         return output, (hn, cn)
 
-    def initHidden(self, h0, batch_size):
-        h0 = self.proj(h0).view(1, batch_size, self.hidden_size) 
+    def initHidden(self, vis_features, sent_features):
+        h0 = self.proj(vis_features)
+        print(h0.shape)
+        print(sent_features.shape)
+        quit()
         return h0
 
-    def initCell(self, batch_size):
-        return torch.zeros(1, batch_size, self.hidden_size).cuda()
+    def initCell(self):
+        return torch.zeros(1, 1, self.hidden_size).cuda()
 
+
+class EncoderLSTM(nn.Module):
+    def __init__(self, input_size, hidden_size=100): 
+        super(EncoderLSTM, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size)
+
+    def forward(self, x):
+        output, (hn, cn) = self.lstm(x) 
+        return output, (hn, cn)
+
+
+class sGCN(nn.Module):
+    def __init__(self, input_size, l1_size, output_size):
+        super(sGCN, self).__init__()
+        self.input_size = input_size
+        self.l1_size = l1_size
+        self.output_size = output_size
+
+        self.proj1 = nn.Linear(input_size, l1_size)
+        self.proj2 = nn.Linear(l1_size, output_size)
+
+    def forward(self, x, G):
+        Ghat = G + torch.eye(G.shape[0]).cuda()
+        D = torch.diag(1/(0.5*torch.sum(G, dim=0)))
+        C = torch.mm(D, torch.mm(Ghat, D))
+        Conv1 = self.proj1(torch.mm(C, x))
+        Conv2 = self.proj2(torch.mm(C, Conv1))
+
+        return Conv2
 
 
 @lru_cache(maxsize=100) 
-def get_raw_vis_features(self, im_id):
+def get_raw_vis_features(im_id):
     features = np.load(os.path.join(Config.get('dirs.raw_img_features'), im_id+'.npy'))
     return features
 
@@ -96,8 +129,12 @@ def train():
     
     vocab_size = embeddings.shape[0]
 
+    gcn = sGCN(word_embedding_size, 100, 50).cuda()
+    encoder = EncoderLSTM(50).cuda()
     decoder = DecoderLSTM(output_size=vocab_size).cuda()
-    decoder_optm = torch.optim.Adam(decoder.parameters(), lr=Config.get('learning_rate'))
+    params = list(encoder.parameters())+list(gcn.parameters())+list(decoder.parameters())
+
+    optim = torch.optim.Adam(params, lr=Config.get('learning_rate'))
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
     for epoch in tqdm(range(10), file=sys.stdout):
@@ -106,10 +143,18 @@ def train():
 
         for sent_id in train_sent_ids:
             sentence = sent_deps[sent_id]['sent']
-            G = sent_deps[sent_id]['graph']
+            G = torch.FloatTensor(sent_deps[sent_id]['graph']).cuda()
             im_features = get_raw_vis_features(sent_id.split('_')[0])
 
+            s_tensor = torch.LongTensor([word2idx[w] for w in sentence]).cuda()
+            s_emb = pretrained_embeddings(s_tensor)
+            s_conv = gcn(s_emb, G).unsqueeze(1)
             
+            # Encoding
+            _, (hn, cn) = encoder(s_conv)
+
+            # Decoding
+
 
 
 
