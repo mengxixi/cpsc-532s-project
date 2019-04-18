@@ -2,7 +2,9 @@
 hidden_size: 50
 concat_size: 128
 n_proposals: 100
-im_feat_size: 512
+im_feat_size: 4096
+im_scene_feat_size: 512
+use_scene: True
 word_emb_size: 200
 freeze_lm: True
 language_model: models/glove/glove.twitter.27B.200d.txt
@@ -40,8 +42,10 @@ dirs:
     root: /home/siyi/flickr30k-images
     proposals: proposals
 
-  features: features_scene_graph
-  annotations: annotations_sent_graph
+  features: features_vgg
+  scene_features: features_scene_graph
+  raw_img_features: features_vgg_rawimage
+  annotations: annotations
 
   tmp:
     root: tmp
