@@ -39,10 +39,8 @@ class DecoderLSTM(nn.Module):
 
     def initHidden(self, vis_features, sent_features):
         h0 = self.proj(vis_features)
-        print(h0.shape)
-        print(sent_features.shape)
-        quit()
-        return h0
+        h0 = torch.cat((h0, sent_features.view(-1)), dim=0)
+        return h0.view(1, 1, self.hidden_size)
 
     def initCell(self):
         return torch.zeros(1, 1, self.hidden_size).cuda()
@@ -87,7 +85,7 @@ def get_raw_vis_features(im_id):
 
 
 def build_word2idx(sent_deps):
-    word2idx = {'UNK' : 0}
+    word2idx = {'UNK' : 0, '<SOS>' : 1, '<EOS>' : 2}
 
     # construct vocabulary based on all sentences in the training set
     for sent_id, sent_dict in sent_deps.items():
@@ -129,13 +127,13 @@ def train():
     
     vocab_size = embeddings.shape[0]
 
-    gcn = sGCN(word_embedding_size, 100, 50).cuda()
-    encoder = EncoderLSTM(50).cuda()
+    gcn = sGCN(word_embedding_size, 100, word_embedding_size).cuda()
+    encoder = EncoderLSTM(word_embedding_size).cuda()
     decoder = DecoderLSTM(output_size=vocab_size).cuda()
     params = list(encoder.parameters())+list(gcn.parameters())+list(decoder.parameters())
 
     optim = torch.optim.Adam(params, lr=Config.get('learning_rate'))
-    criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
+    criterion = torch.nn.CrossEntropyLoss()
 
     for epoch in tqdm(range(10), file=sys.stdout):
         running_loss = 0
@@ -144,18 +142,26 @@ def train():
         for sent_id in train_sent_ids:
             sentence = sent_deps[sent_id]['sent']
             G = torch.FloatTensor(sent_deps[sent_id]['graph']).cuda()
-            im_features = get_raw_vis_features(sent_id.split('_')[0])
+            im_features = torch.FloatTensor(get_raw_vis_features(sent_id.split('_')[0])).cuda()
 
             s_tensor = torch.LongTensor([word2idx[w] for w in sentence]).cuda()
             s_emb = pretrained_embeddings(s_tensor)
-            s_conv = gcn(s_emb, G).unsqueeze(1)
-            
+            s_conv = gcn(s_emb, G)
+            eos_emb = pretrained_embeddings(torch.LongTensor([2]).cuda())
+            s_conv = torch.cat((s_conv, eos_emb), dim=0).unsqueeze(1)
+
             # Encoding
             _, (hn, cn) = encoder(s_conv)
 
             # Decoding
+            decoder_hidden = decoder.initHidden(im_features, hn)
+            decoder_cell = decoder.initCell()
+            decoder_input = pretrained_embeddings(torch.LongTensor([1]).cuda()).unsqueeze(1)
 
-
+            for di in range(len(sentence)):
+                decoder_output, (decoder_hidden, decoder_cell) = decoder(decoder_input, decoder_hidden, decoder_cell)
+                print(decoder_output)
+                quit()
 
 
 
