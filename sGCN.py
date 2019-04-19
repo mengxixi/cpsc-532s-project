@@ -30,6 +30,8 @@ PRETRAINED_EMBEDDINGS = Config.get('dirs.tmp.pretrained_embeddings')
 WORD2IDX = Config.get('dirs.tmp.word2idx')
 FLICKR30K_ENTITIES = Config.get('dirs.entities.root')
 
+PRINT_EVERY = Config.get('print_every') # Every x iterations
+EVALUATE_EVERY = Config.get('evaluate_every')
 
 class DecoderLSTM(nn.Module):
     def __init__(self, input_size=200, hidden_size=200, output_size=100000): 
@@ -40,14 +42,14 @@ class DecoderLSTM(nn.Module):
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x, h0, c0):
+    def forward(self, x, h0, c0, batch_size):
         output, (hn, cn) = self.lstm(x, (h0, c0)) 
         output = self.out(output)
         return output, (hn, cn)
 
     def initHidden(self, vis_features, sent_features, batch_size):
         h0 = self.proj(vis_features)
-        h0 = torch.cat((h0, sent_features.view(-1)), dim=0)
+        h0 = torch.cat((h0, sent_features.squeeze(0)), dim=0)
         return h0.view(1, batch_size, self.hidden_size)
 
     def initCell(self, batch_size):
@@ -144,21 +146,22 @@ def train():
     params = list(encoder.parameters())+list(gcn.parameters())+list(decoder.parameters())
 
     optim = torch.optim.Adam(params, lr=Config.get('learning_rate'))
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
     writer.add_text('config', str(Config.CONFIG_DICT))
 
-    batch_size = Config.get('batch_size')
+    BATCH_SIZE = Config.get('batch_size')
     for epoch in tqdm(range(10), file=sys.stdout):
         running_loss = 0
         random.shuffle(train_ids)
 
         train_sent_ids = [im_id+'_'+str(sent_idx) for im_id in train_ids for sent_idx in range(5)]
 
-        for idx in range(0, len(train_sent_ids), batch_size):
-            b_sent_ids = train_sent_ids[idx:idx+batch_size]
+        for batch_idx, idx in enumerate(range(0, len(train_sent_ids), BATCH_SIZE)):
+            b_sent_ids = train_sent_ids[idx:idx+BATCH_SIZE]
+            batch_size = len(b_sent_ids)
             b_sentences = [sent_deps[sid]['sent'] for sid in b_sent_ids]
             max_sent_len = max(len(s) for s in b_sentences)
             b_graphs = []
@@ -177,6 +180,9 @@ def train():
             b_im_features = torch.stack(b_im_features)
             b_padded_seq = pad_sequence(b_seq)
 
+            b_target_seq = [torch.cat((seq, torch.tensor([word2idx['<EOS>']]).cuda())) for seq in b_seq]   
+            b_target_seq = pad_sequence(b_target_seq, padding_value=-1)    
+
             b_emb = pretrained_embeddings(b_padded_seq).permute(1,0,2)
             b_conv = gcn(b_emb, b_graphs)
 
@@ -194,40 +200,44 @@ def train():
             _, (hn, cn) = encoder(b_conv_emb)
 
             # Decoding
-            decoder_hidden = decoder.initHidden(im_features, hn, batch_size)
+            decoder_hidden = decoder.initHidden(b_im_features, hn, batch_size)
             decoder_cell = decoder.initCell(batch_size)
 
-            # TODO: This need to be batched <SOS>
-            # TODO: Also need to modify all_decoder_outputs, target_seqs, padded with -1, etc.
-            decoder_input = pretrained_embeddings(torch.LongTensor([1]).cuda()).unsqueeze(1)
+            decoder_input = pretrained_embeddings(torch.LongTensor([word2idx["<SOS>"]]).cuda()).repeat(batch_size, 1).unsqueeze(1)
+            all_decoder_outputs = torch.zeros(max_sent_len+1, batch_size, vocab_size).cuda()
 
-            all_decoder_outputs = torch.zeros(len(sentence)+1, vocab_size).cuda()
+            b_input_seq = b_emb.permute(1,0,2)
+            b_input_seq = torch.cat((b_input_seq, pretrained_embeddings(torch.LongTensor([word2idx["<EOS>"]]).cuda()).repeat(batch_size, 1).unsqueeze(0)), dim=0)
 
-            for di in range(len(sentence)):
-                decoder_output, (decoder_hidden, decoder_cell) = decoder(decoder_input, decoder_hidden, decoder_cell)
-                all_decoder_outputs[di] = decoder_output.view(-1)
+            EOS_mask = torch.ones(batch_size).type(torch.LongTensor).cuda()
+            for di in range(max_sent_len+1):
+                decoder_output, (decoder_hidden, decoder_cell) = decoder(decoder_input, decoder_hidden, decoder_cell, batch_size)
+                all_decoder_outputs[di] = decoder_output.squeeze(1)
 
                 if np.random.uniform() < 0.9:
-                    decoder_input = pretrained_embeddings(s_tensor[di]).view(1, 1, word_embedding_size)
+                    decoder_input = b_input_seq[di].unsqueeze(1)
                 else:
                     topv, topi = decoder_output.topk(1) 
-                    decoder_input = pretrained_embeddings(topi.view(-1)).view(1, 1, word_embedding_size)
-                    if topi.item() == 2:
-                        break
+                    topi = topi.view(-1)
+                    decoder_input = pretrained_embeddings(topi).unsqueeze(1)
 
-            target_seq = torch.cat((s_tensor, torch.LongTensor([2]).cuda()))
-            loss = criterion(all_decoder_outputs, target_seq)
+                    if di < max_sent_len-1:
+                        EOS_mask[torch.nonzero((topi==word2idx["<EOS>"]))] = 0
+                        b_target_seq[di+1, torch.nonzero(EOS_mask)] = -1
+
+            loss = criterion(all_decoder_outputs.permute(1,2,0), b_target_seq.permute(1,0))
             loss.backward()
             optim.step()
             optim.zero_grad()
 
             running_loss += loss.item()
-
             global_step = epoch*len(train_sent_ids)+idx
+
             # Log losses
-            if idx % 500 == 499:
+            print_batches = PRINT_EVERY//BATCH_SIZE
+            if batch_idx % print_batches == print_batches-1:
                 writer.add_scalar('loss', loss.item(), global_step)
-                logging.info("Epoch %d, query %d, loss: %.3f" % (epoch+1, idx+1, running_loss/500))
+                logging.info("Epoch %d, query %d, loss: %.3f" % (epoch+1, (batch_idx+1)*BATCH_SIZE, running_loss/print_batches))
                 running_loss = 0
 
 
