@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from torch import nn
+from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence, pad_sequence
 from torch.autograd import Variable
 from torchvision import models, transforms
 from tensorboardX import SummaryWriter
@@ -76,14 +77,16 @@ class sGCN(nn.Module):
         self.proj2 = nn.Linear(l1_size, output_size)
         self.dropout = nn.Dropout(0.5)
 
-    def forward(self, x, G):
-        Ghat = G + torch.eye(G.shape[0]).cuda()
-        D = torch.diag(0.5/torch.sum(G, dim=0))
-        C = D@Ghat@D
-        Conv1 = self.dropout(torch.relu(self.proj1(C@x)))
-        Conv2 = self.dropout(torch.relu(self.proj2(C@Conv1)))
+    def forward(self, x, G):        
+        eyes = torch.eye(G.shape[1]).repeat(x.shape[0], 1, 1).cuda()
+        Ghat = G + eyes
+        D = torch.diag_embed(0.5/torch.sum(Ghat, dim=1), dim1=1, dim2=2)
 
-        return x
+        C = torch.bmm(torch.bmm(D, Ghat), D)
+        Conv1 = self.dropout(torch.relu(self.proj1(torch.bmm(C, x))))
+        Conv2 = self.dropout(torch.relu(self.proj2(torch.bmm(C, Conv1))))
+
+        return Conv2
 
 
 @lru_cache(maxsize=100) 
@@ -147,20 +150,39 @@ def train():
     writer = SummaryWriter(os.path.join('logs', subdir))
     writer.add_text('config', str(Config.CONFIG_DICT))
 
+    batch_size = Config.get('batch_size')
     for epoch in tqdm(range(10), file=sys.stdout):
         running_loss = 0
         random.shuffle(train_ids)
 
         train_sent_ids = [im_id+'_'+str(sent_idx) for im_id in train_ids for sent_idx in range(5)]
 
-        for idx, sent_id in enumerate(train_sent_ids):
-            sentence = sent_deps[sent_id]['sent']
-            G = torch.FloatTensor(sent_deps[sent_id]['graph']).cuda()
-            im_features = torch.FloatTensor(get_raw_vis_features(sent_id.split('_')[0])).cuda()
+        for idx in range(0, len(train_sent_ids), batch_size):
+            b_sent_ids = train_sent_ids[idx:idx+batch_size]
+            b_sentences = [sent_deps[sid]['sent'] for sid in b_sent_ids]
+            max_sent_len = max(len(s) for s in b_sentences)
+            b_graphs = []
+            b_im_features = []
+            b_seq = []
+            for i, sid in enumerate(b_sent_ids):
+                graph = torch.zeros(max_sent_len, max_sent_len).cuda()
+                sl = len(b_sentences[i])
+                graph[:sl, :sl] = torch.FloatTensor(sent_deps[sid]['graph']).cuda()
+                b_graphs.append(graph)
+                b_im_features.append(torch.FloatTensor(get_raw_vis_features(sid.split('_')[0])).cuda())
+                b_seq.append(torch.tensor([word2idx[word] for word in b_sentences[i]]).cuda()) 
 
-            s_tensor = torch.LongTensor([word2idx[w] for w in sentence]).cuda()
-            s_emb = pretrained_embeddings(s_tensor)
-            s_conv = gcn(s_emb, G)
+            b_sentences, b_graphs, b_im_features, b_seq = zip(*sorted(zip(b_sentences, b_graphs, b_im_features, b_seq), key=lambda l:len(l[0]), reverse=True))
+            b_graphs = torch.stack(b_graphs)
+            b_im_features = torch.stack(b_im_features)
+            b_padded_seq = pad_sequence(b_seq)
+
+            b_emb = pretrained_embeddings(b_padded_seq).permute(1,0,2)
+            b_conv = gcn(b_emb, b_graphs)
+            print(b_conv.shape)
+            quit()
+
+
             eos_emb = pretrained_embeddings(torch.LongTensor([2]).cuda())
             s_conv = torch.cat((s_conv, eos_emb), dim=0).unsqueeze(1)
 
