@@ -158,10 +158,28 @@ def train():
             decoder_cell = decoder.initCell()
             decoder_input = pretrained_embeddings(torch.LongTensor([1]).cuda()).unsqueeze(1)
 
+            all_decoder_outputs = torch.zeros(len(sentence)+1, vocab_size).cuda()
+
             for di in range(len(sentence)):
                 decoder_output, (decoder_hidden, decoder_cell) = decoder(decoder_input, decoder_hidden, decoder_cell)
-                print(decoder_output)
-                quit()
+                all_decoder_outputs[di] = decoder_output.view(-1)
+
+                if np.random.uniform() < 0.9:
+                    decoder_input = pretrained_embeddings(s_tensor[di]).view(1, 1, word_embedding_size)
+                else:
+                    topv, topi = decoder_output.topk(1) 
+                    decoder_input = pretrained_embeddings(topi.view(-1)).view(1, 1, word_embedding_size)
+                    if topi.item() == 2:
+                        break
+
+            target_seq = torch.cat((s_tensor, torch.LongTensor([2]).cuda()))
+            loss = criterion(all_decoder_outputs, target_seq)
+            loss.backward()
+            print(loss)
+            optim.step()
+            optim.zero_grad()
+
+            running_loss += loss 
 
 
 
