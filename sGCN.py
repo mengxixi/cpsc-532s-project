@@ -1,7 +1,10 @@
 import os
 import sys
 import pickle
+import random
+import logging
 from functools import lru_cache
+from datetime import datetime
 
 import numpy as np
 import torch
@@ -17,6 +20,10 @@ from language_model import GloVe
 from config import Config
 
 Config.load_config()
+
+# logging configurations
+LOG_FORMAT = "%(asctime)s %(message)s"
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 
 PRETRAINED_EMBEDDINGS = Config.get('dirs.tmp.pretrained_embeddings')
 WORD2IDX = Config.get('dirs.tmp.word2idx')
@@ -67,15 +74,16 @@ class sGCN(nn.Module):
 
         self.proj1 = nn.Linear(input_size, l1_size)
         self.proj2 = nn.Linear(l1_size, output_size)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x, G):
         Ghat = G + torch.eye(G.shape[0]).cuda()
-        D = torch.diag(1/(0.5*torch.sum(G, dim=0)))
-        C = torch.mm(D, torch.mm(Ghat, D))
-        Conv1 = self.proj1(torch.mm(C, x))
-        Conv2 = self.proj2(torch.mm(C, Conv1))
+        D = torch.diag(0.5/torch.sum(G, dim=0))
+        C = D@Ghat@D
+        Conv1 = self.dropout(torch.relu(self.proj1(C@x)))
+        Conv2 = self.dropout(torch.relu(self.proj2(C@Conv1)))
 
-        return Conv2
+        return x
 
 
 @lru_cache(maxsize=100) 
@@ -135,11 +143,17 @@ def train():
     optim = torch.optim.Adam(params, lr=Config.get('learning_rate'))
     criterion = torch.nn.CrossEntropyLoss()
 
+    subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
+    writer = SummaryWriter(os.path.join('logs', subdir))
+    writer.add_text('config', str(Config.CONFIG_DICT))
+
     for epoch in tqdm(range(10), file=sys.stdout):
         running_loss = 0
+        random.shuffle(train_ids)
+
         train_sent_ids = [im_id+'_'+str(sent_idx) for im_id in train_ids for sent_idx in range(5)]
 
-        for sent_id in train_sent_ids:
+        for idx, sent_id in enumerate(train_sent_ids):
             sentence = sent_deps[sent_id]['sent']
             G = torch.FloatTensor(sent_deps[sent_id]['graph']).cuda()
             im_features = torch.FloatTensor(get_raw_vis_features(sent_id.split('_')[0])).cuda()
@@ -175,12 +189,20 @@ def train():
             target_seq = torch.cat((s_tensor, torch.LongTensor([2]).cuda()))
             loss = criterion(all_decoder_outputs, target_seq)
             loss.backward()
-            print(loss)
             optim.step()
             optim.zero_grad()
 
-            running_loss += loss 
+            running_loss += loss.item()
 
+            global_step = epoch*len(train_sent_ids)+idx
+            # Log losses
+            if idx % 500 == 499:
+                writer.add_scalar('loss', loss.item(), global_step)
+                logging.info("Epoch %d, query %d, loss: %.3f" % (epoch+1, idx+1, running_loss/500))
+                running_loss = 0
+
+
+# def evaluate():
 
 
 def generate_vgg_raw_features():
