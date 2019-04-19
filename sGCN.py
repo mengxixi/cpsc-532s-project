@@ -37,7 +37,7 @@ class DecoderLSTM(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.proj = nn.Linear(4096, 100)
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size)
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
 
     def forward(self, x, h0, c0):
@@ -45,13 +45,13 @@ class DecoderLSTM(nn.Module):
         output = self.out(output)
         return output, (hn, cn)
 
-    def initHidden(self, vis_features, sent_features):
+    def initHidden(self, vis_features, sent_features, batch_size):
         h0 = self.proj(vis_features)
         h0 = torch.cat((h0, sent_features.view(-1)), dim=0)
-        return h0.view(1, 1, self.hidden_size)
+        return h0.view(1, batch_size, self.hidden_size)
 
-    def initCell(self):
-        return torch.zeros(1, 1, self.hidden_size).cuda()
+    def initCell(self, batch_size):
+        return torch.zeros(1, batch_size, self.hidden_size).cuda()
 
 
 class EncoderLSTM(nn.Module):
@@ -179,19 +179,26 @@ def train():
 
             b_emb = pretrained_embeddings(b_padded_seq).permute(1,0,2)
             b_conv = gcn(b_emb, b_graphs)
-            print(b_conv.shape)
-            quit()
 
-
-            eos_emb = pretrained_embeddings(torch.LongTensor([2]).cuda())
-            s_conv = torch.cat((s_conv, eos_emb), dim=0).unsqueeze(1)
+            b_conv_emb = []
+            # TODO: Optimize this part for speed
+            for i, sent in enumerate(b_sentences):
+                sent_emb = b_conv[i,:len(sent),:]
+                eos_emb = pretrained_embeddings(torch.LongTensor([2]).cuda())
+                sent_emb = torch.cat((sent_emb, eos_emb), dim=0)
+                b_conv_emb.append(sent_emb)
+            
+            b_conv_emb = pack_sequence(b_conv_emb)
 
             # Encoding
-            _, (hn, cn) = encoder(s_conv)
+            _, (hn, cn) = encoder(b_conv_emb)
 
             # Decoding
-            decoder_hidden = decoder.initHidden(im_features, hn)
-            decoder_cell = decoder.initCell()
+            decoder_hidden = decoder.initHidden(im_features, hn, batch_size)
+            decoder_cell = decoder.initCell(batch_size)
+
+            # TODO: This need to be batched <SOS>
+            # TODO: Also need to modify all_decoder_outputs, target_seqs, padded with -1, etc.
             decoder_input = pretrained_embeddings(torch.LongTensor([1]).cuda()).unsqueeze(1)
 
             all_decoder_outputs = torch.zeros(len(sentence)+1, vocab_size).cuda()
