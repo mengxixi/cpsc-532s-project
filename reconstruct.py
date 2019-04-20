@@ -131,7 +131,7 @@ def train():
     params = list(encoder.parameters())+list(gcn.parameters())+list(decoder.parameters())
 
     optim = torch.optim.Adam(params, lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
-    scheduler = MultiStepLR(optim, milestones=[8, 15])
+    # scheduler = MultiStepLR(optim, milestones=[8, 15])
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
@@ -142,7 +142,7 @@ def train():
     for epoch in tqdm(range(20), file=sys.stdout):
         running_loss = 0
         writer.add_scalar('learning_rate', optim.param_groups[0]['lr'], epoch)
-        scheduler.step()
+        # scheduler.step()
 
         random.shuffle(train_ids)
 
@@ -203,7 +203,7 @@ def train():
             for di in range(max_sent_len+1):
                 decoder_output, (decoder_hidden, decoder_cell) = decoder(decoder_input, decoder_hidden, decoder_cell, batch_size)
                 all_decoder_outputs[di] = decoder_output.squeeze(1)
-                if np.random.uniform() < 0.9:
+                if epoch < 5 or np.random.uniform() < 0.9:
                     decoder_input = b_input_seq[di].unsqueeze(1)
                 else:
                     topv, topi = decoder_output.topk(1) 
@@ -235,6 +235,9 @@ def train():
                 val_loss, val_bleu, sample_output_pairs = evaluate(val_ids, pretrained_embeddings, word2idx, vocabulary, max_len, gcn, encoder, decoder, sent_deps)
                 writer.add_scalar('val_bleu', val_bleu, global_step)
                 writer.add_scalar('val_loss', val_loss, global_step)
+                for pair in sample_output_pairs:
+                    writer.add_text('==', pair[0], global_step)
+                    writer.add_text('>>', pair[1], global_step)
                 logging.info("Validation loss: %.3f, best_loss: %.3f, bleu score: %.3f" % (val_loss, best_loss, val_bleu))
 
                 # Improved on validation set
@@ -341,9 +344,11 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
                 batch_output.append(output_sent)
                 blue_total += compute_bleu(b_sentences[i], output_sent)
                 if np.random.uniform() < 0.001:
-                    sample_output_pairs.append((b_sentences[i], output_sent))
-                    print("GT: %s" % ' '.join(b_sentences[i]))
-                    print("RC: %s" % ' '.join(output_sent))
+                    gt = ' '.join(b_sentences[i])
+                    rc = ' '.join(output_sent)
+                    sample_output_pairs.append((gt, rc))
+                    print("==: %s" % gt)
+                    print(">>: %s" % rc)
 
     return loss_total/len(sent_ids), blue_total/len(sent_ids), sample_output_pairs
 
