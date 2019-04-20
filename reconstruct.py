@@ -38,13 +38,14 @@ PRINT_EVERY = Config.get('print_every') # Every x iterations
 EVALUATE_EVERY = Config.get('evaluate_every')
 
 class DecoderLSTM(nn.Module):
-    def __init__(self, input_size=200, hidden_size=200, output_size=100000): 
+    def __init__(self, input_size=200, hidden_size=200, output_size=None): 
         super(DecoderLSTM, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.proj = nn.Linear(4096, 100)
+        self.proj = nn.Linear(4096, 200)
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x, h0, c0, batch_size):
         output, (hn, cn) = self.lstm(x, (h0, c0)) 
@@ -52,16 +53,17 @@ class DecoderLSTM(nn.Module):
         return output, (hn, cn)
 
     def initHidden(self, vis_features, sent_features, batch_size):
-        h0 = self.proj(vis_features)
-        h0 = torch.cat((h0, sent_features.squeeze(0)), dim=0)
-        return h0.view(1, batch_size, self.hidden_size)
+        h0 = self.dropout(self.proj(vis_features))
+        h0 = h0.unsqueeze(0) + sent_features
+        # h0 = torch.cat((h0, sent_features.squeeze(0)), dim=1).unsqueeze(0)
+        return h0
 
     def initCell(self, batch_size):
         return torch.zeros(1, batch_size, self.hidden_size).cuda()
 
 
 class EncoderLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size=100): 
+    def __init__(self, input_size, hidden_size=200): 
         super(EncoderLSTM, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -119,7 +121,6 @@ def train():
         embeddings = np.array([lm.get_word_vector(w) for w in word2idx.keys()])
         np.save(PRETRAINED_EMBEDDINGS, embeddings)
 
-
     pretrained_embeddings = nn.Embedding.from_pretrained(torch.FloatTensor(embeddings)).cuda()
     
     vocab_size = embeddings.shape[0]
@@ -140,6 +141,9 @@ def train():
     best_loss = float("inf")
     for epoch in tqdm(range(20), file=sys.stdout):
         running_loss = 0
+        writer.add_scalar('learning_rate', optim.param_groups[0]['lr'], epoch)
+        scheduler.step()
+
         random.shuffle(train_ids)
 
         train_sent_ids = [im_id+'_'+str(sent_idx) for im_id in train_ids for sent_idx in range(5)]
@@ -164,14 +168,15 @@ def train():
             b_graphs = torch.stack(b_graphs)
             b_im_features = torch.stack(b_im_features)
             b_padded_seq = pad_sequence(b_seq)  
+            seq_lengths = [len(s) for s in b_sentences]
 
             b_emb = pretrained_embeddings(b_padded_seq).permute(1,0,2)
-            b_conv = gcn(b_emb, b_graphs)
+            b_conv = gcn(b_emb, b_graphs, seq_lengths)
 
             b_conv_emb = []
             # TODO: Optimize this part for speed
-            for i, sent in enumerate(b_sentences):
-                sent_emb = b_conv[i,:len(sent),:]
+            for i, sl in enumerate(seq_lengths):
+                sent_emb = b_conv[i,:sl,:]
                 eos_emb = pretrained_embeddings(torch.LongTensor([2]).cuda())
                 sent_emb = torch.cat((sent_emb, eos_emb), dim=0)
                 b_conv_emb.append(sent_emb)
@@ -183,7 +188,7 @@ def train():
 
             # Decoding
             decoder_hidden = decoder.initHidden(b_im_features, hn, batch_size)
-            decoder_cell = decoder.initCell(batch_size)
+            decoder_cell = cn
 
             decoder_input = pretrained_embeddings(torch.LongTensor([word2idx["<SOS>"]]).cuda()).repeat(batch_size, 1).unsqueeze(1)
             all_decoder_outputs = torch.zeros(max_sent_len+1, batch_size, vocab_size).cuda()
@@ -198,7 +203,6 @@ def train():
             for di in range(max_sent_len+1):
                 decoder_output, (decoder_hidden, decoder_cell) = decoder(decoder_input, decoder_hidden, decoder_cell, batch_size)
                 all_decoder_outputs[di] = decoder_output.squeeze(1)
-
                 if np.random.uniform() < 0.9:
                     decoder_input = b_input_seq[di].unsqueeze(1)
                 else:
@@ -278,18 +282,20 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
         b_graphs = torch.stack(b_graphs)
         b_im_features = torch.stack(b_im_features)
         b_padded_seq = pad_sequence(b_seq)  
+        seq_lengths = [len(s) for s in b_sentences]
 
         with torch.no_grad():
             b_emb = pretrained_embeddings(b_padded_seq).permute(1,0,2)
-            b_conv = gcn(b_emb, b_graphs)
+            b_conv = gcn(b_emb, b_graphs, seq_lengths)
 
             b_conv_emb = []
             # TODO: Optimize this part for speed
-            for i, sent in enumerate(b_sentences):
-                sent_emb = b_conv[i,:len(sent),:]
+            for i, sl in enumerate(seq_lengths):
+                sent_emb = b_conv[i,:sl,:]
                 eos_emb = pretrained_embeddings(torch.LongTensor([2]).cuda())
                 sent_emb = torch.cat((sent_emb, eos_emb), dim=0)
                 b_conv_emb.append(sent_emb)
+            
             
             b_conv_emb = pack_sequence(b_conv_emb)
 
@@ -298,7 +304,7 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
 
             # Decoding
             decoder_hidden = decoder.initHidden(b_im_features, hn, batch_size)
-            decoder_cell = decoder.initCell(batch_size)
+            decoder_cell = cn
 
             decoder_input = pretrained_embeddings(torch.LongTensor([word2idx["<SOS>"]]).cuda()).repeat(batch_size, 1).unsqueeze(1)
             all_decoder_outputs = torch.zeros(max_sent_len+1, batch_size, vocab_size).cuda()
@@ -316,8 +322,8 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
                 all_decoder_outputs[di] = decoder_output.squeeze(1)
                 topv, topi = decoder_output.topk(1)
                 topi = topi.view(-1)
-                decoder_input = pretrained_embeddings(topi).unsqueeze(1)
                 batch_output_idx[di] = topi
+                decoder_input = pretrained_embeddings(topi).unsqueeze(1)
 
             loss = criterion(all_decoder_outputs.permute(1,2,0), b_target_seq.permute(1,0))
             loss_total += (loss.item() * batch_size)
