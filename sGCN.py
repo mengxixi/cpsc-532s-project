@@ -358,7 +358,7 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
                     print("GT: %s" % ' '.join(b_sentences[i]))
                     print("RC: %s" % ' '.join(output_sent))
 
-    return loss_total/len(sent_id), blue_total/len(sent_id), sample_output_pairs
+    return loss_total/len(sent_ids), blue_total/len(sent_ids), sample_output_pairs
 
 
 def compute_bleu(reference_sentences, predicted_sentence): 
