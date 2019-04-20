@@ -151,7 +151,7 @@ def train():
     decoder = DecoderLSTM(output_size=vocab_size).cuda()
     params = list(encoder.parameters())+list(gcn.parameters())+list(decoder.parameters())
 
-    optim = torch.optim.Adam(params, lr=Config.get('learning_rate'))
+    optim = torch.optim.Adam(params, lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optim, milestones=[8, 15])
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
@@ -159,7 +159,7 @@ def train():
     writer = SummaryWriter(os.path.join('logs', subdir))
     writer.add_text('config', str(Config.CONFIG_DICT))
 
-    best_bleu = 0.0
+    best_loss = float("inf")
     for epoch in tqdm(range(20), file=sys.stdout):
         running_loss = 0
         random.shuffle(train_ids)
@@ -253,14 +253,14 @@ def train():
                 val_loss, val_bleu, sample_output_pairs = evaluate(val_ids, pretrained_embeddings, word2idx, vocabulary, max_len, gcn, encoder, decoder, sent_deps)
                 writer.add_scalar('val_bleu', val_bleu, global_step)
                 writer.add_scalar('val_loss', val_loss, global_step)
-                logging.info("Validation bleu score: %.3f, best_bleu: %.3f" % (val_bleu, best_bleu))
+                logging.info("Validation loss: %.3f, best_loss: %.3f, bleu score: %.3f" % (val_loss, best_loss, val_bleu))
 
                 # Improved on validation set
-                if val_bleu > best_bleu:
+                if val_loss < best_loss:
                     torch.save(gcn.state_dict(), Config.get('sgcn_ckpt'))
                     torch.save(encoder.state_dict(), Config.get('sencoder_ckpt'))
                     torch.save(decoder.state_dict(), Config.get('sdecoder_ckpt'))
-                    best_bleu = val_bleu
+                    best_loss = val_loss
 
                 gcn.train()
                 encoder.train()
@@ -272,7 +272,7 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
     sent_ids = [im_id+'_'+str(sent_idx) for im_id in ids for sent_idx in range(5)]
     vocab_size = len(word2idx)
 
-    criterion = torch.nn.CrossEntropyLoss(ignore_index=-1, reduction='sum')
+    criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
     blue_total = 0.0
     loss_total = 0.0
@@ -339,7 +339,7 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
                 batch_output_idx[di] = topi
 
             loss = criterion(all_decoder_outputs.permute(1,2,0), b_target_seq.permute(1,0))
-            loss_total += loss.item()
+            loss_total += (loss.item() * batch_size)
 
             batch_output_idx = batch_output_idx.transpose(0, 1).type(torch.LongTensor).cpu().numpy() 
             batch_output = []
@@ -347,9 +347,9 @@ def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, 
                 output_sent = []
                 for ind in batch_output_idx[i]:
                     word = vocabulary[ind.item()] 
-                    output_sent.append(word)
                     if word == "<EOS>":
                         break
+                    output_sent.append(word)
 
                 batch_output.append(output_sent)
                 blue_total += compute_bleu(b_sentences[i], output_sent)
