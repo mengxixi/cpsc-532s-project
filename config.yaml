@@ -9,6 +9,9 @@ word_emb_size: 200
 freeze_lm: True
 language_model: models/glove/glove.twitter.27B.200d.txt
 checkpoint: models/grounder_sent_graph.ckpt
+sgcn_ckpt: models/sgcn.ckpt
+sencoder_ckpt: models/sencoder.ckpt
+sdecoder_ckpt: models/sdecoder.ckpt
 
 # training parameters
 batch_size: 64

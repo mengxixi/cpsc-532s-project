@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from torch import nn
-from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence, pad_sequence
+from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence, pad_sequence, pack_padded_sequence
 from torch.autograd import Variable
 from torchvision import models, transforms
 from tensorboardX import SummaryWriter
@@ -153,6 +153,7 @@ def train():
     writer.add_text('config', str(Config.CONFIG_DICT))
 
     BATCH_SIZE = Config.get('batch_size')
+    best_bleu = 0.0
     for epoch in tqdm(range(10), file=sys.stdout):
         running_loss = 0
         random.shuffle(train_ids)
@@ -178,10 +179,7 @@ def train():
             b_sentences, b_graphs, b_im_features, b_seq = zip(*sorted(zip(b_sentences, b_graphs, b_im_features, b_seq), key=lambda l:len(l[0]), reverse=True))
             b_graphs = torch.stack(b_graphs)
             b_im_features = torch.stack(b_im_features)
-            b_padded_seq = pad_sequence(b_seq)
-
-            b_target_seq = [torch.cat((seq, torch.tensor([word2idx['<EOS>']]).cuda())) for seq in b_seq]   
-            b_target_seq = pad_sequence(b_target_seq, padding_value=-1)    
+            b_padded_seq = pad_sequence(b_seq)  
 
             b_emb = pretrained_embeddings(b_padded_seq).permute(1,0,2)
             b_conv = gcn(b_emb, b_graphs)
@@ -208,6 +206,9 @@ def train():
 
             b_input_seq = b_emb.permute(1,0,2)
             b_input_seq = torch.cat((b_input_seq, pretrained_embeddings(torch.LongTensor([word2idx["<EOS>"]]).cuda()).repeat(batch_size, 1).unsqueeze(0)), dim=0)
+
+            b_target_seq = [torch.cat((seq, torch.tensor([word2idx['<EOS>']]).cuda())) for seq in b_seq]   
+            b_target_seq = pad_sequence(b_target_seq, padding_value=-1)  
 
             EOS_mask = torch.ones(batch_size).type(torch.LongTensor).cuda()
             for di in range(max_sent_len+1):
@@ -240,8 +241,25 @@ def train():
                 logging.info("Epoch %d, query %d, loss: %.3f" % (epoch+1, (batch_idx+1)*BATCH_SIZE, running_loss/print_batches))
                 running_loss = 0
 
+            # Log evaluations
+            evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
+            if batch_idx % evaluate_batches == evaluate_batches-1:
+                bleu, val_loss = evaluate(val_ids, pretrained_embeddings, word2idx, gcn, encoder, decoder, sent_deps, summary_writer=writer, global_step=global_step)
+                writer.add_scalar('val_blue', acc, global_step)
+                writer.add_scalar('val_loss', val_loss, global_step)
+                logging.info("Validation accuracy: %.3f, best_acc: %.3f" % (acc, best_acc))
 
-# def evaluate():
+                # Improved on validation set
+                if bleu > best_bleu:
+                    torch.save(gcn.state_dict(), Config.get('sgcn_ckpt'))
+                    torch.save(encoder.state_dict(), Config.get('sencoder_ckpt'))
+                    torch.save(decoder.state_dict(), Config.get('sdecoder_ckpt'))
+                    best_bleu = bleu
+
+                gcn.train()
+                encoder.train()
+                decoder.train()
+    writer.close()
 
 
 def generate_vgg_raw_features():
