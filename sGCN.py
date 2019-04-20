@@ -13,9 +13,11 @@ from torch import nn
 from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence, pad_sequence, pack_padded_sequence
 from torch.autograd import Variable
 from torchvision import models, transforms
+from torch.optim.lr_scheduler import MultiStepLR
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from PIL import Image
+from nltk.translate.bleu_score import sentence_bleu
 
 from language_model import GloVe
 from config import Config
@@ -29,6 +31,7 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 PRETRAINED_EMBEDDINGS = Config.get('dirs.tmp.pretrained_embeddings')
 WORD2IDX = Config.get('dirs.tmp.word2idx')
 FLICKR30K_ENTITIES = Config.get('dirs.entities.root')
+BATCH_SIZE = Config.get('batch_size')
 
 PRINT_EVERY = Config.get('print_every') # Every x iterations
 EVALUATE_EVERY = Config.get('evaluate_every')
@@ -106,7 +109,8 @@ def build_word2idx(sent_deps):
             if token not in word2idx:
                 word2idx[token] = len(word2idx)
 
-    return word2idx
+    vocabulary = list(word2idx.keys())
+    return word2idx, vocabulary
 
 def train():
     # Load datasets
@@ -122,7 +126,9 @@ def train():
     with open(Config.get('dirs.tmp.sent_deps'), 'rb') as f:
         sent_deps = pickle.load(f)
 
-    word2idx = build_word2idx(sent_deps)
+    max_len = max(len(sdata['sent']) for sdata in sent_deps.values())
+
+    word2idx, vocabulary = build_word2idx(sent_deps)
     with open(WORD2IDX, 'wb') as f:
         pickle.dump(word2idx, f)
 
@@ -146,15 +152,15 @@ def train():
     params = list(encoder.parameters())+list(gcn.parameters())+list(decoder.parameters())
 
     optim = torch.optim.Adam(params, lr=Config.get('learning_rate'))
+    scheduler = MultiStepLR(optim, milestones=[8, 15])
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
     writer.add_text('config', str(Config.CONFIG_DICT))
 
-    BATCH_SIZE = Config.get('batch_size')
     best_bleu = 0.0
-    for epoch in tqdm(range(10), file=sys.stdout):
+    for epoch in tqdm(range(20), file=sys.stdout):
         running_loss = 0
         random.shuffle(train_ids)
 
@@ -244,22 +250,123 @@ def train():
             # Log evaluations
             evaluate_batches = EVALUATE_EVERY//BATCH_SIZE
             if batch_idx % evaluate_batches == evaluate_batches-1:
-                bleu, val_loss = evaluate(val_ids, pretrained_embeddings, word2idx, gcn, encoder, decoder, sent_deps, summary_writer=writer, global_step=global_step)
-                writer.add_scalar('val_blue', acc, global_step)
+                val_loss, val_bleu, sample_output_pairs = evaluate(val_ids, pretrained_embeddings, word2idx, vocabulary, max_len, gcn, encoder, decoder, sent_deps)
+                writer.add_scalar('val_bleu', val_bleu, global_step)
                 writer.add_scalar('val_loss', val_loss, global_step)
-                logging.info("Validation accuracy: %.3f, best_acc: %.3f" % (acc, best_acc))
+                logging.info("Validation bleu score: %.3f, best_bleu: %.3f" % (val_bleu, best_bleu))
 
                 # Improved on validation set
-                if bleu > best_bleu:
+                if val_bleu > best_bleu:
                     torch.save(gcn.state_dict(), Config.get('sgcn_ckpt'))
                     torch.save(encoder.state_dict(), Config.get('sencoder_ckpt'))
                     torch.save(decoder.state_dict(), Config.get('sdecoder_ckpt'))
-                    best_bleu = bleu
+                    best_bleu = val_bleu
 
                 gcn.train()
                 encoder.train()
                 decoder.train()
     writer.close()
+
+
+def evaluate(ids, pretrained_embeddings, word2idx, vocabulary, max_length, gcn, encoder, decoder, sent_deps):
+    sent_ids = [im_id+'_'+str(sent_idx) for im_id in ids for sent_idx in range(5)]
+    vocab_size = len(word2idx)
+
+    criterion = torch.nn.CrossEntropyLoss(ignore_index=-1, reduction='sum')
+
+    blue_total = 0.0
+    loss_total = 0.0
+    sample_output_pairs = []
+    for batch_idx, idx in enumerate(range(0, len(sent_ids), BATCH_SIZE)):
+        b_sent_ids = sent_ids[idx:idx+BATCH_SIZE]
+        batch_size = len(b_sent_ids)
+        b_sentences = [sent_deps[sid]['sent'] for sid in b_sent_ids]
+        max_sent_len = max(len(s) for s in b_sentences)
+        b_graphs = []
+        b_im_features = []
+        b_seq = []
+        for i, sid in enumerate(b_sent_ids):
+            graph = torch.zeros(max_sent_len, max_sent_len).cuda()
+            sl = len(b_sentences[i])
+            graph[:sl, :sl] = torch.FloatTensor(sent_deps[sid]['graph']).cuda()
+            b_graphs.append(graph)
+            b_im_features.append(torch.FloatTensor(get_raw_vis_features(sid.split('_')[0])).cuda())
+            b_seq.append(torch.tensor([word2idx[word] for word in b_sentences[i]]).cuda()) 
+
+        b_sentences, b_graphs, b_im_features, b_seq = zip(*sorted(zip(b_sentences, b_graphs, b_im_features, b_seq), key=lambda l:len(l[0]), reverse=True))
+        b_graphs = torch.stack(b_graphs)
+        b_im_features = torch.stack(b_im_features)
+        b_padded_seq = pad_sequence(b_seq)  
+
+        with torch.no_grad():
+            b_emb = pretrained_embeddings(b_padded_seq).permute(1,0,2)
+            b_conv = gcn(b_emb, b_graphs)
+
+            b_conv_emb = []
+            # TODO: Optimize this part for speed
+            for i, sent in enumerate(b_sentences):
+                sent_emb = b_conv[i,:len(sent),:]
+                eos_emb = pretrained_embeddings(torch.LongTensor([2]).cuda())
+                sent_emb = torch.cat((sent_emb, eos_emb), dim=0)
+                b_conv_emb.append(sent_emb)
+            
+            b_conv_emb = pack_sequence(b_conv_emb)
+
+            # Encoding
+            _, (hn, cn) = encoder(b_conv_emb)
+
+            # Decoding
+            decoder_hidden = decoder.initHidden(b_im_features, hn, batch_size)
+            decoder_cell = decoder.initCell(batch_size)
+
+            decoder_input = pretrained_embeddings(torch.LongTensor([word2idx["<SOS>"]]).cuda()).repeat(batch_size, 1).unsqueeze(1)
+            all_decoder_outputs = torch.zeros(max_sent_len+1, batch_size, vocab_size).cuda()
+
+            b_input_seq = b_emb.permute(1,0,2)
+            b_input_seq = torch.cat((b_input_seq, pretrained_embeddings(torch.LongTensor([word2idx["<EOS>"]]).cuda()).repeat(batch_size, 1).unsqueeze(0)), dim=0)
+
+            b_target_seq = [torch.cat((seq, torch.tensor([word2idx['<EOS>']]).cuda())) for seq in b_seq]   
+            b_target_seq = pad_sequence(b_target_seq, padding_value=-1)  
+
+            batch_output_idx = torch.zeros(max_sent_len+1, batch_size).cuda()
+
+            for di in range(max_sent_len+1): 
+                decoder_output, (decoder_hidden, decoder_cell) = decoder(decoder_input, decoder_hidden, decoder_cell, batch_size)
+                all_decoder_outputs[di] = decoder_output.squeeze(1)
+                topv, topi = decoder_output.topk(1)
+                topi = topi.view(-1)
+                decoder_input = pretrained_embeddings(topi).unsqueeze(1)
+                batch_output_idx[di] = topi
+
+            loss = criterion(all_decoder_outputs.permute(1,2,0), b_target_seq.permute(1,0))
+            loss_total += loss.item()
+
+            batch_output_idx = batch_output_idx.transpose(0, 1).type(torch.LongTensor).cpu().numpy() 
+            batch_output = []
+            for i in range(batch_size):
+                output_sent = []
+                for ind in batch_output_idx[i]:
+                    word = vocabulary[ind.item()] 
+                    output_sent.append(word)
+                    if word == "<EOS>":
+                        break
+
+                batch_output.append(output_sent)
+                blue_total += compute_bleu(b_sentences[i], output_sent)
+                if np.random.uniform() < 0.001:
+                    sample_output_pairs.append((b_sentences[i], output_sent))
+                    print("GT: %s" % ' '.join(b_sentences[i]))
+                    print("RC: %s" % ' '.join(output_sent))
+
+    return loss_total/len(sent_id), blue_total/len(sent_id), sample_output_pairs
+
+
+def compute_bleu(reference_sentences, predicted_sentence): 
+    """
+        Given a list of reference sentences, and a predicted sentence, compute the BLEU similary between
+        them.
+    """
+    return sentence_bleu(reference_sentences, predicted_sentence, weights=[1])
 
 
 def generate_vgg_raw_features():
