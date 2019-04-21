@@ -236,8 +236,7 @@ def train():
                 writer.add_scalar('val_bleu', val_bleu, global_step)
                 writer.add_scalar('val_loss', val_loss, global_step)
                 for pair in sample_output_pairs:
-                    writer.add_text('==', pair[0], global_step)
-                    writer.add_text('>>', pair[1], global_step)
+                    writer.add_text('val_sample', "gt: %s -- rc: %s" % (pair[0], pair[1]), global_step)
                 logging.info("Validation loss: %.3f, best_loss: %.3f, bleu score: %.3f" % (val_loss, best_loss, val_bleu))
 
                 # Improved on validation set
