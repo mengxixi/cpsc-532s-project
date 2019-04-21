@@ -169,13 +169,8 @@ def preprocess_flickr30k_entities(get_features=True):
         else:
             print("No boxes annotated for %s.jpg" % fid)
 
-<<<<<<< HEAD
-
     with open(Config.get('dirs.tmp.sent_deps'), 'wb') as f:
         pickle.dump(sent_deps, f)
-=======
-        # TODO: Keep track of each phrase's index in its original sentence? (and keep track of which sentence for visualization purposes)
->>>>>>> master
 
     print("Number of queries: %d" % n_queries)
     print("Proposal upper-bound: %.3f" % (proposal_ub/n_queries))
