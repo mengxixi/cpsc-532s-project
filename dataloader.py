@@ -16,13 +16,14 @@ from language_model import GloVe
 
 
 class Flickr30K_Entities(torch.utils.data.Dataset):
-    def __init__(self, image_ids, sent_deps, word2idx=None):
+    def __init__(self, image_ids, sent_deps, sGCN, word2idx=None):
         super().__init__()
 
         self.queries = []
         self.proposals = {}
         self.img2idx = {}
         self.sent_deps = sent_deps
+        self.sGCN = sGCN
 
         if not word2idx:
             self.word2idx = {'UNK' : 0}
@@ -114,14 +115,16 @@ class Flickr30K_Entities(torch.utils.data.Dataset):
     @lru_cache(maxsize=10) # cache size based on number of phrases per sentence
     def _get_sent_features(self, sent_id):
         sent_dict = self.sent_deps[sent_id]
-        G = 0.5*torch.FloatTensor(sent_dict['graph']).cuda()
-        G = G + torch.eye(G.shape[0]).cuda()
-        Dinv = torch.diag(1/torch.sum(G, dim=0))
-        
+        G = torch.FloatTensor(sent_dict['graph']).cuda()
+
         sent_indices = torch.LongTensor([self.word2idx[w] if w in self.word2idx else 0 for w in sent_dict['sent']]).cuda()
         X = self.embeddings(sent_indices)
-        X = Dinv@G@X
-        return X
+
+        seq_lengths = [len(sent_dict['sent'])]
+        with torch.no_grad():
+            Xconv = self.sGCN(X.unsqueeze(0), G.unsqueeze(0), seq_lengths)
+
+        return Xconv.squeeze(0)
 
 
     def collate_fn(self, data):

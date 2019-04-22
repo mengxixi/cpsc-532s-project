@@ -22,6 +22,9 @@ class sGCN(nn.Module):
         D[D == float('inf')] = 0 # numerical stability
         C = torch.bmm(torch.bmm(D, Ghat), D)
         H1 = self.dropout(torch.relu(self.proj1(torch.bmm(C, x))))
-        H2 = self.dropout(torch.relu(self.proj2(torch.bmm(C, H1))))
+        if self.training:
+            H2 = self.dropout(torch.relu(self.proj2(torch.bmm(C, H1))))
+        else:
+            H2 = H1
 
         return H2

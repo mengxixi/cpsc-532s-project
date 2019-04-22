@@ -2,13 +2,13 @@
 hidden_size: 50
 concat_size: 128
 n_proposals: 100
-im_feat_size: 4096
+im_feat_size: 512
 im_scene_feat_size: 512
-use_scene: True
+use_scene: False
 word_emb_size: 200
 freeze_lm: True
 language_model: models/glove/glove.twitter.27B.200d.txt
-checkpoint: models/grounder_sent_graph.ckpt
+checkpoint: models/f_grounder_sGCN.ckpt
 sgcn_ckpt: models/sgcn.ckpt
 sencoder_ckpt: models/sencoder.ckpt
 sdecoder_ckpt: models/sdecoder.ckpt
@@ -20,7 +20,7 @@ learning_rate: 0.001
 sched_steps: [15, 25]
 weight_decay: 0.0005
 print_every: 100
-evaluate_every: 5000
+evaluate_every: 10000
 
 # misc
 iou_threshold: 0.5
@@ -45,10 +45,10 @@ dirs:
     root: /home/siyi/flickr30k-images
     proposals: proposals
 
-  features: features_vgg
+  features: features_scene_graph
   scene_features: features_scene_graph
   raw_img_features: features_vgg_rawimage
-  annotations: annotations
+  annotations: annotations_sent_graph
 
   tmp:
     root: tmp

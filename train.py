@@ -15,6 +15,7 @@ from tqdm import tqdm
 import evaluate
 from dataloader import Flickr30K_Entities, QuerySampler
 from grounding import GroundeR
+from sGCN import sGCN
 from config import Config
 
 Config.load_config()
@@ -32,8 +33,8 @@ PRINT_EVERY = Config.get('print_every') # Every x iterations
 EVALUATE_EVERY = Config.get('evaluate_every')
 
 
-def get_dataloader(im_ids, sent_deps, word2idx=None):
-    dataset = Flickr30K_Entities(im_ids, sent_deps, word2idx=word2idx)
+def get_dataloader(im_ids, sent_deps, sGCN, word2idx=None):
+    dataset = Flickr30K_Entities(im_ids, sent_deps, sGCN, word2idx=word2idx)
     loader = torch.utils.data.DataLoader(
         dataset, 
         batch_size = BATCH_SIZE, 
@@ -57,23 +58,29 @@ def train():
     with open(Config.get('dirs.tmp.sent_deps'), 'rb') as f:
         sent_deps = pickle.load(f)
 
-    train_loader = get_dataloader(train_ids, sent_deps)
+    word_embedding_size = Config.get('word_emb_size')
+    # Load trained sGCN
+    gcn = sGCN(word_embedding_size, 100, word_embedding_size).cuda()
+    gcn.load_state_dict(torch.load(Config.get('sgcn_ckpt')))
+    gcn.eval()
+
+    train_loader = get_dataloader(train_ids, sent_deps, gcn)
     word2idx = train_loader.dataset.word2idx
     with open(WORD2IDX, 'wb') as f:
         pickle.dump(word2idx, f)
-    val_loader = get_dataloader(val_ids, sent_deps, word2idx=word2idx)
+    val_loader = get_dataloader(val_ids, sent_deps, gcn, word2idx=word2idx)
 
     # Model, optimizer, etc.
     hidden_size = Config.get('hidden_size')
     concat_size = Config.get('concat_size')
     n_proposals = Config.get('n_proposals')
     im_feat_size = Config.get('im_feat_size')
-    word_embedding_size = Config.get('word_emb_size')
+
 
     if Config.get('use_scene'):
         im_feat_size += Config.get('im_scene_feat_size')
         
-    grounder = GroundeR(im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
+    grounder = GroundeR(im_feature_size=im_feat_size, lm_emb_size=100, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
     
     optimizer = torch.optim.Adam(grounder.parameters(), lr=Config.get('learning_rate'), weight_decay=Config.get('weight_decay'))
     scheduler = MultiStepLR(optimizer, milestones=Config.get('sched_steps'))
