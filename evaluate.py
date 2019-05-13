@@ -13,6 +13,7 @@ import train
 import util.misc as misc
 from language_model import GloVe
 from grounding import GroundeR
+from sGCN import sGCN
 from config import Config
 
 
@@ -112,13 +113,18 @@ if __name__ == "__main__":
         val_ids = f1.read().splitlines()
         nobbox_ids = f2.read().splitlines()
 
+    word_embedding_size = Config.get('word_emb_size')
+    # Load trained sGCN
+    gcn = sGCN(word_embedding_size, 100, word_embedding_size).cuda()
+    gcn.load_state_dict(torch.load(Config.get('sgcn_ckpt')))
+    gcn.eval()
+
     val_ids = [x for x in val_ids if x not in nobbox_ids]
-    val_loader = train.get_dataloader(val_ids, sent_deps, word2idx=word2idx)
+    val_loader = train.get_dataloader(val_ids, sent_deps, gcn, word2idx=word2idx)
 
     subdir = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
     writer = SummaryWriter(os.path.join('logs', subdir))
     
-    word_embedding_size = Config.get('word_emb_size')
     hidden_size = Config.get('hidden_size')
     concat_size = Config.get('concat_size')
     n_proposals = Config.get('n_proposals')
@@ -127,7 +133,7 @@ if __name__ == "__main__":
     if Config.get('use_scene'):
         im_feat_size += Config.get('im_scene_feat_size')
 
-    grounder = GroundeR(im_feature_size=im_feat_size, lm_emb_size=word_embedding_size, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
+    grounder = GroundeR(im_feature_size=im_feat_size, lm_emb_size=100, hidden_size=hidden_size, concat_size=concat_size, output_size=n_proposals).cuda()
 
     grounder.load_state_dict(torch.load(Config.get('checkpoint')))
     acc, loss = evaluate(grounder, val_loader, sent_deps, writer, n_samples=20)
