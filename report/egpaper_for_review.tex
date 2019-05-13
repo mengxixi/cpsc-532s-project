@@ -1,0 +1,64 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage{cvpr}
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{caption} 
+\usepackage{subcaption}
+\captionsetup[table]{skip=8pt}
+\usepackage[normalem]{ulem}
+
+% Include other packages here, before hyperref.
+
+% If you comment hyperref and then uncomment it, you should delete
+% egpaper.aux before re-running latex.  (Or just hit 'q' on the first latex
+% run, let it finish, and you should be clear).
+\usepackage[pagebackref=true,breaklinks=true,colorlinks,bookmarks=false]{hyperref}
+
+\def\R{\mathbb{R}}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+
+\cvprfinalcopy % *** Uncomment this line for the final submission
+
+\def\cvprPaperID{****} % *** Enter the CVPR Paper ID here
+\def\httilde{\mbox{\tt\raisebox{-.5ex}{\symbol{126}}}}
+
+% Pages are numbered in submission mode, and unnumbered in camera-ready
+\ifcvprfinal\pagestyle{empty}\fi
+\begin{document}
+
+%%%%%%%%% TITLE
+\title{%
+  Visual Grounding of Phrases with Scene Graph Embeddings \\
+  \large CPSC 532S, 2018W2, Project Report}
+
+\author{Zicong (Alex) Fan\\
+University of British Columbia\\
+Computer Science\\
+{\tt\small fan@cs.ubc.ca}
+% For a paper whose authors are all at the same institution,
+% omit the following lines up until the closing ``}''.
+% Additional authors and addresses can be added with ``\and'',
+% just like the second author.
+% To save space, use either the email address or home page, not both
+\and
+Si Yi (Cathy) Meng\\
+University of British Columbia\\
+Computer Science\\
+{\tt\small mengxixi@cs.ubc.ca}
+}
+
+\maketitle
+%\thispagestyle{empty}
+
+\input{latex/body.tex}
+{\small
+\bibliographystyle{ieee}
+\bibliography{egbib}
+}
+
+\end{document}
